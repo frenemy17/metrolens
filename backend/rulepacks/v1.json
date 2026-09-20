@@ -1,0 +1,44 @@
+{
+  "version": "v1", "effective_from": "2018-01-01",
+  "source_citation": "LM (Packaged Commodities) Rules, 2011, amended up to GSR 629(E) dt 23.06.2017, w.e.f. 01.01.2018",
+  "chapter_ii_applicability": { "citation": "Rule 3",
+    "excludes": ["net_quantity_gt_25kg_or_25L", "cement_fertilizer_farmproduce_gt_50kg", "industrial_consumer", "institutional_consumer"] },
+  "exemptions": { "citation": "Rule 26", "rules": [
+    { "id": "exempt-lt-10g10ml", "condition": "net_qty <= 10g OR 10ml", "except": "tobacco_products" },
+    { "id": "exempt-fastfood", "condition": "fast_food_packed_by_hotel_restaurant" },
+    { "id": "exempt-drugs", "condition": "scheduled_or_nonscheduled_drug_price_control_order" },
+    { "id": "exempt-thread-handloom", "condition": "thread_sold_coil_to_handloom_weavers" } ] },
+  "mandatory_declarations": [
+    { "id": "r6-1a-mfr-name-address", "citation": "Rule 6(1)(a)", "check": "presence", "waived_if": "food_article (FSSAI governs instead)" },
+    { "id": "r6-1aa-country-of-origin", "citation": "Rule 6(1)(aa)", "check": "presence", "condition": "is_imported" },
+    { "id": "r6-1b-generic-name", "citation": "Rule 6(1)(b)", "check": "presence" },
+    { "id": "r6-1c-net-quantity", "citation": "Rule 6(1)(c)", "check": "presence" },
+    { "id": "r6-1d-mfg-month-year", "citation": "Rule 6(1)(d)", "check": "presence", "exempt": ["bidis_incense_sticks", "lpg_cylinder_14_2kg_or_5kg_PSU"] },
+    { "id": "r6-1da-best-before-use-by", "citation": "Rule 6(1)(da)", "check": "presence", "condition": "commodity_may_become_unfit_over_time" },
+    { "id": "r6-1e-mrp", "citation": "Rule 6(1)(e)", "check": "format", "format_rule": "must state MRP inclusive of all taxes, rounded to nearest rupee or 50 paise", "exempt": ["bidi", "lpg_cylinder_administered_price"] },
+    { "id": "r6-1f-dimensions", "citation": "Rule 6(1)(f)", "check": "presence", "condition": "commodity_size_relevant_to_sale" },
+    { "id": "r6-2-consumer-care", "citation": "Rule 6(2)", "check": "presence", "fields": ["name", "address", "telephone", "email"] },
+    { "id": "r6-3-no-alter-sticker", "citation": "Rule 6(3)", "check": "pattern", "flag_if": "sticker_covers_or_alters_original_MRP_except_lowering" },
+    { "id": "r6-10-ecommerce-declarations", "citation": "Rule 6(10)", "check": "presence", "appliesTo": { "channel": ["e-commerce"] }, "note": "all r6-1 declarations except mfg month/year must appear on the listing" }
+  ],
+  "height_table": { "citation": "Rule 7(2)-(3), Table-I", "unit": "mm",
+    "width_rule": "letter/numeral width >= 1/3 of height, except numeral 1 and letters i, l",
+    "bands": [
+      { "pdp_area_cm2_max": 50,   "normal_mm": 1.0, "blown_formed_molded_mm": 1.5 },
+      { "pdp_area_cm2_max": 100,  "normal_mm": 1.5, "blown_formed_molded_mm": 3.0 },
+      { "pdp_area_cm2_max": 500,  "normal_mm": 2.5, "blown_formed_molded_mm": 4.0 },
+      { "pdp_area_cm2_max": 2500, "normal_mm": 4.0, "blown_formed_molded_mm": 6.0 },
+      { "pdp_area_cm2_max": null, "normal_mm": 6.0, "blown_formed_molded_mm": 6.0 } ],
+    "exception": "sub-rules (1)-(4) do not apply if the info is already mandated under another law" },
+  "placement": { "citation": "Rule 8(1)", "check": "placement",
+    "rule": "area around the quantity declaration must be free of other print: >= 1x numeral height above/below, >= 2x numeral height left/right" },
+  "manner": { "citation": "Rule 9", "checks": [
+    { "id": "r9-1a-legible-prominent", "check": "format" },
+    { "id": "r9-1b-contrast-color", "check": "format", "rule": "MRP and net-qty numerals must contrast with label background", "exempt": "blown/formed/molded info on glass or plastic" },
+    { "id": "r9-2-no-read-through-liquid", "check": "placement" },
+    { "id": "r9-4-language", "check": "format", "rule": "must be in Hindi (Devanagari) or English" } ] },
+  "misleading_quantity_wording": { "citation": "Rule 12(6)", "check": "pattern",
+    "flag_if_present": ["minimum", "not less than", "average", "about", "approximately"], "severity": "SUSPECTED_NON_STANDARD" },
+  "unit_rules": { "citation": "Rule 13", "check": "format",
+    "rule": "SI units only; items sold by number use symbol N or U; litre may use 'L'" }
+}
