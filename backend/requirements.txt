@@ -19,3 +19,4 @@ groq
 python-dateutil
 python-dotenv
 google-generativeai
+beautifulsoup4

@@ -70,13 +70,84 @@ class CompoundabilityReq(BaseModel):
     offense_section: str = ""
 
 @router.post("/compoundability-check")
-async def compoundability_check(req: CompoundabilityReq):
-    # Mocking checkSection48Compoundability from old logic
+async def compoundability_check(
+    req: CompoundabilityReq,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Real Section 48(4) Legal Metrology Act repeat offender audit:
+    Under Section 48(4), an offense is compoundable ONLY if the offender has NOT
+    committed a similar offense within the previous 3 years.
+    Second and subsequent offenses within 3 years are strictly NON-COMPOUNDABLE
+    and mandate direct prosecution.
+    """
+    from datetime import timedelta
+    three_years_ago = datetime.utcnow() - timedelta(days=3 * 365)
+    
+    result = await db.execute(select(InspectionRecord))
+    all_records = result.scalars().all()
+    
+    prior_offenses = []
+    name_clean = req.offender_name.strip().lower()
+    gstin_clean = req.gstin.strip().upper()
+    
+    for rec in all_records:
+        data = rec.data or {}
+        compliance = str(data.get("overall_compliance") or data.get("verdict") or "").upper()
+        if compliance == "COMPLIANT":
+            continue
+            
+        prod = data.get("product") or {}
+        extracted = data.get("extracted_fields") or {}
+        
+        cand_name = str(extracted.get("manufacturer_name") or prod.get("brand_name") or "").lower()
+        cand_gstin = str(extracted.get("gstin") or "").upper()
+        
+        name_match = bool(name_clean and (name_clean in cand_name or cand_name in name_clean))
+        gstin_match = bool(gstin_clean and gstin_clean == cand_gstin)
+        
+        if name_match or gstin_match:
+            created_str = data.get("created_at") or data.get("timestamp")
+            rec_date = None
+            if created_str:
+                try:
+                    rec_date = datetime.fromisoformat(created_str.replace("Z", "+00:00")).replace(tzinfo=None)
+                except Exception:
+                    rec_date = rec.created_at
+            else:
+                rec_date = rec.created_at
+                
+            if rec_date and rec_date >= three_years_ago:
+                prior_offenses.append({
+                    "inspection_id": rec.id,
+                    "date": rec_date.strftime("%Y-%m-%d"),
+                    "product": prod.get("product_name", "Packaged Commodity"),
+                    "verdict": compliance
+                })
+    
+    if len(prior_offenses) > 0:
+        return {
+            "compoundability": False,
+            "status": "NON_COMPOUNDABLE",
+            "eligible": False,
+            "citation": "Section 48(4) Legal Metrology Act, 2009",
+            "action": f"REPEAT OFFENDER: Found {len(prior_offenses)} prior violation(s) within the 3-year statutory window for '{req.offender_name}'. Second offenses are strictly non-compoundable under Section 48(4) and mandate court prosecution.",
+            "prior_offenses_count": len(prior_offenses),
+            "prior_offenses": prior_offenses[:3],
+            "penalty_amount": None,
+            "prosecution_required": True
+        }
+    
     return {
         "compoundability": True,
         "status": "COMPOUNDABLE",
+        "eligible": True,
         "citation": "Section 48(4) Legal Metrology Act, 2009",
-        "action": f"Eligible for compounding. No prior offenses found for {req.offender_name}."
+        "action": f"Eligible for compounding. First recorded offense within 3-year window for '{req.offender_name}'. Form IN-1 Improvement Notice recommended under Jan Vishwas Act.",
+        "prior_offenses_count": 0,
+        "prior_offenses": [],
+        "penalty_amount": 5000,
+        "prosecution_required": False
     }
 
 class NoticeReq(BaseModel):

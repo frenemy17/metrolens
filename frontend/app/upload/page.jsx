@@ -6,9 +6,19 @@ import { triggerHaptic } from '@/utils/haptics';
 import { openDB } from 'idb';
 import NavBar from '@/components/NavBar';
 import DynamicLoader from '@/components/DynamicLoader';
-import { X, AlertTriangle } from 'lucide-react';
+import { X, AlertTriangle, ShieldCheck, Sparkles } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+const ECOM_RULES = [
+  { id: 'r6-1a-mfr-name-address', label: 'Manufacturer / Packer Name & Address', statute: 'Rule 6(1)(a)' },
+  { id: 'r6-1aa-country-of-origin', label: 'Country of Origin (Mandatory for Imports)', statute: 'Rule 6(1)(aa)' },
+  { id: 'r6-1b-generic-name', label: 'Common / Generic Commodity Name', statute: 'Rule 6(1)(b)' },
+  { id: 'r6-1c-net-quantity', label: 'Net Quantity in Metric SI Units', statute: 'Rule 6(1)(c)' },
+  { id: 'r6-1e-mrp', label: 'Maximum Retail Price (MRP) incl. of all taxes', statute: 'Rule 6(1)(e)' },
+  { id: 'r6-2-consumer-care', label: 'Consumer Care Contact / Toll-Free / Email', statute: 'Rule 6(2)' },
+  { id: 'r6-1da-best-before-use-by', label: 'Best Before / Expiry Date (Perishables)', statute: 'Rule 6(1)(da)' },
+];
 
 export default function UploadPage() {
   const router = useRouter();
@@ -19,6 +29,23 @@ export default function UploadPage() {
   const [sourceType, setSourceType] = useState('physical_label');
   const [logs, setLogs] = useState([]);
   const [errorBanner, setErrorBanner] = useState(null);
+
+  // E-Commerce Digital Listing State
+  const [ecomUrl, setEcomUrl] = useState('https://blinkit.com/prn/lays-classic-salted-chips/prid/32412');
+  const [ecomBrand, setEcomBrand] = useState("Lay's");
+  const [ecomDecls, setEcomDecls] = useState([
+    'r6-1a-mfr-name-address',
+    'r6-1aa-country-of-origin',
+    'r6-1b-generic-name',
+    'r6-1c-net-quantity',
+    'r6-1e-mrp',
+    'r6-2-consumer-care',
+    'r6-1da-best-before-use-by'
+  ]);
+
+  const toggleEcomDecl = (id) => {
+    setEcomDecls(prev => prev.includes(id) ? prev.filter(x => x !== id) : [...prev, id]);
+  };
 
 
 
@@ -134,8 +161,113 @@ export default function UploadPage() {
     }
   };
 
+  const handleAutoScrape = async () => {
+    if (!ecomUrl.trim()) return toast.error('Please enter an e-commerce product URL.');
+    setLoading(true);
+    setErrorBanner(null);
+    const toastId = toast.loading('Crawling live webpage & extracting declarations via Gemini AI...');
+    setLogs([
+      '> Connecting to live marketplace endpoint...',
+      `> Target URL: ${ecomUrl}`,
+      '> Parsing HTML DOM & structured JSON-LD schemas...',
+      '> Gemini 3.6 Flash extracting Rule 6(1) packaging declarations...',
+      '> Cross-verifying against Rule 6(10) statutory exemptions...'
+    ]);
+
+    try {
+      const token = (typeof window !== 'undefined') ? (sessionStorage.getItem('token') || localStorage.getItem('token')) : null;
+      const res = await fetch(`${API}/ecommerce/scrape-and-audit`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({
+          url: ecomUrl,
+          product_name: productName || null,
+          brand_name: ecomBrand || null
+        })
+      });
+
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.detail || 'Live scrape and audit failed');
+
+      const inspId = json.inspection_id || json.id;
+      setLogs(prev => [
+        ...prev,
+        `> Product: ${json.product?.product_name || json.product_name || 'Extracted Commodity'}`,
+        `> Brand: ${json.product?.brand_name || json.brand_name || 'Retail Brand'}`,
+        `> Declarations Found: ${json.extracted_fields?.declarations_found?.length || 0}`,
+        `> Statutory Verdict: ${json.overall_compliance || json.verdict}`,
+        '> Redirecting to inspection report...'
+      ]);
+      toast.success('Live page audited successfully via Gemini AI!', { id: toastId });
+      setTimeout(() => {
+        router.push(`/results/${inspId}`);
+      }, 1200);
+    } catch (err) {
+      toast.error('Scrape audit error: ' + err.message, { id: toastId });
+      setErrorBanner(err.message);
+      setLogs(prev => [...prev, `> ERROR: ${err.message}`]);
+      setLoading(false);
+    }
+  };
+
   const handleUpload = async (e) => {
     e.preventDefault();
+
+    if (sourceType === 'ecommerce_listing') {
+      if (!ecomUrl.trim()) return toast.error('Please enter an e-commerce product URL.');
+      setLoading(true);
+      setErrorBanner(null);
+      const toastId = toast.loading('Auditing digital marketplace listing against Rule 6(10)...');
+      setLogs([
+        '> Digital marketplace listing registered',
+        `> Target URL: ${ecomUrl}`,
+        '> Cross-referencing declarations against Rule 6(10) statutory exemptions...',
+        '> Verifying MRP, Net Quantity, Origin, and Customer Care terms...'
+      ]);
+
+      try {
+        const token = (typeof window !== 'undefined') ? (sessionStorage.getItem('token') || localStorage.getItem('token')) : null;
+        const res = await fetch(`${API}/ecommerce/audit`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+          },
+          body: JSON.stringify({
+            url: ecomUrl,
+            product_name: productName || "Lay's Classic Salted Potato Chips",
+            brand_name: ecomBrand || "Lay's",
+            extracted_declarations: ecomDecls,
+            context: { channel: 'e-commerce' }
+          })
+        });
+
+        const json = await res.json().catch(() => ({}));
+        if (!res.ok) throw new Error(json.detail || 'E-Commerce audit failed');
+
+        const inspId = json.inspection_id || json.id;
+        setLogs(prev => [
+          ...prev, 
+          `> Audit completed with verdict: ${json.overall_compliance || json.verdict}`, 
+          '> Pre-packing month/year waived under Rule 6(10)',
+          '> Redirecting to inspection report...'
+        ]);
+        toast.success('Digital listing audited successfully!', { id: toastId });
+        setTimeout(() => {
+          router.push(`/results/${inspId}`);
+        }, 1000);
+      } catch (err) {
+        toast.error('Audit failed: ' + err.message, { id: toastId });
+        setErrorBanner(err.message);
+        setLogs(prev => [...prev, `> ERROR: ${err.message}`]);
+        setLoading(false);
+      }
+      return;
+    }
+
     if (files.length === 0) return toast.error('No image selected. Please take a photo or select an image.');
     
     setLoading(true);
@@ -356,91 +488,268 @@ export default function UploadPage() {
 
         <div className="grid grid-cols-1 md:grid-cols-5 gap-6">
           <form onSubmit={handleUpload} className="mello-card p-4 sm:p-6 md:p-8 col-span-1 md:col-span-3 flex flex-col gap-4 sm:gap-6 border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs bg-white dark:bg-[#0D1A2D]">
-            <div className="flex flex-col gap-2">
-              <label className="text-[10px] font-mono tracking-[0.2em] uppercase text-text-primary">Product Image</label>
-              <div className="relative w-full flex-1 min-h-[200px] border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 flex flex-col items-center justify-center rounded-2xl transition-colors bg-slate-50/70 dark:bg-slate-900/40 p-4">
-                {previews.length > 0 ? (
-                  <div className="w-full flex flex-col gap-4">
-                    <div className="text-[13px] text-text-secondary text-center">
-                      Added {previews.length} of 3 photos. AI will synthesize all angles.
-                    </div>
-                    <div className="flex flex-wrap gap-3 sm:gap-4 justify-center items-center">
-                      {previews.map((src, i) => (
-                        <div key={i} className="relative w-[90px] sm:w-[100px] h-[130px] sm:h-[140px] border border-border rounded-lg overflow-hidden group/img shadow-sm">
-                          <img src={src} className="w-full h-full object-cover" />
-                          <button type="button" onClick={() => removeFile(i)} className="absolute top-1 right-1 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center opacity-90 sm:opacity-0 sm:group-hover/img:opacity-100 transition-opacity z-20 hover:scale-110 cursor-pointer">
-                            <X size={14} />
-                          </button>
-                        </div>
-                      ))}
-                      
-                      {previews.length < 3 && (
-                        <div className="flex flex-col gap-2.5 w-[90px] sm:w-[100px] h-[130px] sm:h-[140px]">
-                          <div className="relative h-1/2 rounded-lg border border-border bg-background flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-muted mb-1"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                            <span className="text-[10px] font-medium text-text-secondary">+ Camera</span>
-                            <input type="file" accept="image/*" capture="environment" onChange={handleFile} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                          </div>
-                          <div className="relative h-1/2 rounded-lg border border-border bg-background flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors">
-                            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-muted mb-1"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                            <span className="text-[10px] font-medium text-text-secondary">+ Gallery</span>
-                            <input type="file" accept="image/*" onChange={handleFile} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                ) : (
-                  <div className="flex flex-col items-center gap-4 relative z-10 w-full py-4 sm:py-6 text-center">
-                     <span className="text-xs sm:text-sm font-semibold text-slate-500 max-w-sm px-2">Capture product label clearly. Make sure all declarations are readable.</span>
-                     <div className="flex flex-wrap sm:flex-nowrap gap-3 w-full justify-center px-2">
-                       
-                       <div className="relative overflow-hidden mello-btn-secondary !bg-surface !border-border !px-4 !py-3 flex flex-col items-center gap-2 hover:!border-primary cursor-pointer flex-1 min-w-[120px] max-w-[160px] shadow-xs rounded-xl">
-                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
-                         <span className="text-xs font-semibold text-text-primary">Take Photo</span>
-                         <input type="file" accept="image/*" capture="environment" onChange={handleFile} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                       </div>
+            {/* Inspection Mode Switcher */}
+            <div className="flex p-1 bg-slate-100 dark:bg-slate-900 rounded-xl border border-slate-200 dark:border-slate-800">
+              <button
+                type="button"
+                onClick={() => setSourceType('physical_label')}
+                className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  sourceType === 'physical_label'
+                    ? 'bg-white dark:bg-[#0D1A2D] text-primary dark:text-blue-400 shadow-xs border border-slate-200 dark:border-slate-700'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <span>📦 Physical Package Scan</span>
+              </button>
+              <button
+                type="button"
+                onClick={() => setSourceType('ecommerce_listing')}
+                className={`flex-1 py-2.5 px-3 rounded-lg text-xs font-semibold flex items-center justify-center gap-2 transition-all cursor-pointer ${
+                  sourceType === 'ecommerce_listing'
+                    ? 'bg-white dark:bg-[#0D1A2D] text-primary dark:text-blue-400 shadow-xs border border-slate-200 dark:border-slate-700'
+                    : 'text-text-secondary hover:text-text-primary'
+                }`}
+              >
+                <span>🛒 E-Commerce Digital Listing</span>
+                <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">Rule 6(10)</span>
+              </button>
+            </div>
 
-                       <div className="relative overflow-hidden mello-btn-secondary !bg-surface !border-border !px-4 !py-3 flex flex-col items-center gap-2 hover:!border-primary cursor-pointer flex-1 min-w-[120px] max-w-[160px] shadow-xs rounded-xl">
-                         <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
-                         <span className="text-xs font-semibold text-text-primary">Gallery</span>
-                         <input type="file" accept="image/*" onChange={handleFile} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
-                       </div>
-
-                     </div>
-                      
-                      <div className="mt-2 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 w-full flex justify-center">
-                        <button
-                          type="button"
-                          onClick={loadSampleLabel}
-                          className="text-[11px] font-mono tracking-wider uppercase text-primary dark:text-blue-400 hover:underline flex items-center gap-1.5 py-1.5 px-3 rounded-full bg-primary/5 dark:bg-blue-400/10 border border-primary/20 dark:border-blue-400/20 transition-all cursor-pointer text-center"
-                        >
-                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
-                          <span>Load Sample Test Label (Chips)</span>
-                        </button>
+            {sourceType === 'physical_label' ? (
+              <>
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-mono tracking-[0.2em] uppercase text-text-primary">Product Image</label>
+                  <div className="relative w-full flex-1 min-h-[200px] border-2 border-dashed border-slate-300 dark:border-slate-700 hover:border-blue-500 flex flex-col items-center justify-center rounded-2xl transition-colors bg-slate-50/70 dark:bg-slate-900/40 p-4">
+                    {previews.length > 0 ? (
+                      <div className="w-full flex flex-col gap-4">
+                        <div className="text-[13px] text-text-secondary text-center">
+                          Added {previews.length} of 3 photos. AI will synthesize all angles.
+                        </div>
+                        <div className="flex flex-wrap gap-3 sm:gap-4 justify-center items-center">
+                          {previews.map((src, i) => (
+                            <div key={i} className="relative w-[90px] sm:w-[100px] h-[130px] sm:h-[140px] border border-border rounded-lg overflow-hidden group/img shadow-sm">
+                              <img src={src} className="w-full h-full object-cover" />
+                              <button type="button" onClick={() => removeFile(i)} className="absolute top-1 right-1 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center opacity-90 sm:opacity-0 sm:group-hover/img:opacity-100 transition-opacity z-20 hover:scale-110 cursor-pointer">
+                                <X size={14} />
+                              </button>
+                            </div>
+                          ))}
+                          
+                          {previews.length < 3 && (
+                            <div className="flex flex-col gap-2.5 w-[90px] sm:w-[100px] h-[130px] sm:h-[140px]">
+                              <div className="relative h-1/2 rounded-lg border border-border bg-background flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-muted mb-1"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                                <span className="text-[10px] font-medium text-text-secondary">+ Camera</span>
+                                <input type="file" accept="image/*" capture="environment" onChange={handleFile} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                              </div>
+                              <div className="relative h-1/2 rounded-lg border border-border bg-background flex flex-col items-center justify-center cursor-pointer hover:border-primary transition-colors">
+                                <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-text-muted mb-1"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                                <span className="text-[10px] font-medium text-text-secondary">+ Gallery</span>
+                                <input type="file" accept="image/*" onChange={handleFile} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                              </div>
+                            </div>
+                          )}
+                        </div>
                       </div>
+                    ) : (
+                      <div className="flex flex-col items-center gap-4 relative z-10 w-full py-4 sm:py-6 text-center">
+                         <span className="text-xs sm:text-sm font-semibold text-slate-500 max-w-sm px-2">Capture product label clearly. Make sure all declarations are readable.</span>
+                         <div className="flex flex-wrap sm:flex-nowrap gap-3 w-full justify-center px-2">
+                           
+                           <div className="relative overflow-hidden mello-btn-secondary !bg-surface !border-border !px-4 !py-3 flex flex-col items-center gap-2 hover:!border-primary cursor-pointer flex-1 min-w-[120px] max-w-[160px] shadow-xs rounded-xl">
+                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/><circle cx="12" cy="13" r="4"/></svg>
+                             <span className="text-xs font-semibold text-text-primary">Take Photo</span>
+                             <input type="file" accept="image/*" capture="environment" onChange={handleFile} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                           </div>
+
+                           <div className="relative overflow-hidden mello-btn-secondary !bg-surface !border-border !px-4 !py-3 flex flex-col items-center gap-2 hover:!border-primary cursor-pointer flex-1 min-w-[120px] max-w-[160px] shadow-xs rounded-xl">
+                             <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="3" y="3" width="18" height="18" rx="2" ry="2"/><circle cx="8.5" cy="8.5" r="1.5"/><polyline points="21 15 16 10 5 21"/></svg>
+                             <span className="text-xs font-semibold text-text-primary">Gallery</span>
+                             <input type="file" accept="image/*" onChange={handleFile} className="absolute inset-0 w-full h-full opacity-0 cursor-pointer" />
+                           </div>
+
+                         </div>
+                          
+                          <div className="mt-2 pt-3 border-t border-dashed border-slate-200 dark:border-slate-800 w-full flex justify-center">
+                            <button
+                              type="button"
+                              onClick={loadSampleLabel}
+                              className="text-[11px] font-mono tracking-wider uppercase text-primary dark:text-blue-400 hover:underline flex items-center gap-1.5 py-1.5 px-3 rounded-full bg-primary/5 dark:bg-blue-400/10 border border-primary/20 dark:border-blue-400/20 transition-all cursor-pointer text-center"
+                            >
+                              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><circle cx="12" cy="12" r="10"/><polygon points="10 8 16 12 10 16 10 8"/></svg>
+                              <span>Load Sample Test Label (Chips)</span>
+                            </button>
+                          </div>
+                      </div>
+                    )}
                   </div>
-                )}
-              </div>
-            </div>
+                </div>
 
-            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 sm:gap-4">
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-mono tracking-[0.2em] uppercase text-text-primary">Product Name (Optional)</label>
-                <input type="text" className="mello-input text-base sm:text-sm" placeholder="e.g. Organic Honey" value={productName} onChange={e => setProductName(e.target.value)} />
-              </div>
-              <div className="flex flex-col gap-1.5">
-                <label className="text-[10px] font-mono tracking-[0.2em] uppercase text-text-primary">Source Type</label>
-                <select className="mello-input appearance-none text-base sm:text-sm" value={sourceType} onChange={e => setSourceType(e.target.value)}>
-                  <option value="physical_label">Physical Label (Package)</option>
-                  <option value="ecommerce_listing">E-Commerce Listing</option>
-                </select>
-              </div>
-            </div>
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-mono tracking-[0.2em] uppercase text-text-primary">Product Name (Optional)</label>
+                  <input type="text" className="mello-input text-base sm:text-sm" placeholder="e.g. Organic Honey" value={productName} onChange={e => setProductName(e.target.value)} />
+                </div>
+              </>
+            ) : (
+              /* E-Commerce Listing Audit Form */
+              <div className="flex flex-col gap-4">
+                <div className="p-3.5 bg-blue-50/70 dark:bg-blue-950/30 border border-blue-200 dark:border-blue-800/60 rounded-xl text-xs text-blue-900 dark:text-blue-200">
+                  <div className="font-semibold flex items-center gap-1.5 mb-1 text-primary dark:text-blue-400">
+                    <ShieldCheck size={14} />
+                    <span>Rule 6(10) Statutory Exemption Engine</span>
+                  </div>
+                  <p className="text-[11px] leading-relaxed text-slate-600 dark:text-slate-300">
+                    Under Legal Metrology PCR 2011, e-commerce listings must display all standard declarations except pre-packing month & year (waived under Rule 6(10)).
+                  </p>
+                </div>
 
-            <button type="submit" className="mello-btn-primary w-full h-[52px] sm:h-[48px] text-sm sm:text-base font-bold shadow-md active-press rounded-xl" disabled={loading}>
-              {loading ? 'Processing scan...' : 'Run Compliance Check'}
-            </button>
+                {/* Quick Presets */}
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-mono tracking-[0.2em] uppercase text-text-muted">Quick Test Presets</label>
+                  <div className="flex flex-wrap gap-2">
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEcomUrl('https://blinkit.com/prn/lays-classic-salted-chips/prid/32412');
+                        setEcomBrand("Lay's");
+                        setProductName("Lay's Classic Salted Potato Chips (50g)");
+                        setEcomDecls(['r6-1a-mfr-name-address', 'r6-1aa-country-of-origin', 'r6-1b-generic-name', 'r6-1c-net-quantity', 'r6-1e-mrp', 'r6-2-consumer-care', 'r6-1da-best-before-use-by']);
+                      }}
+                      className="px-2.5 py-1 text-xs font-mono rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors"
+                    >
+                      Blinkit (Compliant)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEcomUrl('https://www.amazon.in/dp/B00TO23D4S');
+                        setEcomBrand('Tata Tea');
+                        setProductName('Tata Tea Gold Leaf Pouch 500g');
+                        setEcomDecls(['r6-1a-mfr-name-address', 'r6-1aa-country-of-origin', 'r6-1b-generic-name', 'r6-1c-net-quantity', 'r6-1e-mrp']); // Missing customer care
+                      }}
+                      className="px-2.5 py-1 text-xs font-mono rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors"
+                    >
+                      Amazon (Missing Care)
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setEcomUrl('https://www.zeptonow.com/pn/imported-cookies/pvid/99182');
+                        setEcomBrand('Royal Danish');
+                        setProductName('Butter Cookies 400g (Imported)');
+                        setEcomDecls(['r6-1b-generic-name', 'r6-1c-net-quantity']); // Major non-compliance
+                      }}
+                      className="px-2.5 py-1 text-xs font-mono rounded-lg bg-slate-100 dark:bg-slate-800 hover:bg-slate-200 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-300 border border-slate-200 dark:border-slate-700 transition-colors"
+                    >
+                      Zepto (Non-Compliant)
+                    </button>
+                  </div>
+                </div>
+
+                <div className="flex flex-col gap-1.5">
+                  <label className="text-[10px] font-mono tracking-[0.2em] uppercase text-text-primary">E-Commerce Listing URL</label>
+                  <input
+                    type="url"
+                    className="mello-input text-base sm:text-sm font-mono text-xs"
+                    placeholder="https://blinkit.com/prn/... or https://amazon.in/..."
+                    value={ecomUrl}
+                    onChange={e => setEcomUrl(e.target.value)}
+                    required
+                  />
+                </div>
+
+                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-mono tracking-[0.2em] uppercase text-text-primary">Brand / Manufacturer</label>
+                    <input
+                      type="text"
+                      className="mello-input text-base sm:text-sm"
+                      placeholder="e.g. Lay's or Tata"
+                      value={ecomBrand}
+                      onChange={e => setEcomBrand(e.target.value)}
+                    />
+                  </div>
+                  <div className="flex flex-col gap-1.5">
+                    <label className="text-[10px] font-mono tracking-[0.2em] uppercase text-text-primary">Product Title</label>
+                    <input
+                      type="text"
+                      className="mello-input text-base sm:text-sm"
+                      placeholder="e.g. Classic Salted Potato Chips 50g"
+                      value={productName}
+                      onChange={e => setProductName(e.target.value)}
+                    />
+                  </div>
+                </div>
+
+                {/* Declarations Checklist */}
+                <div className="flex flex-col gap-2">
+                  <div className="flex items-center justify-between">
+                    <label className="text-[10px] font-mono tracking-[0.2em] uppercase text-text-primary">
+                      Declarations Present on Digital Listing ({ecomDecls.length}/{ECOM_RULES.length})
+                    </label>
+                    <button
+                      type="button"
+                      onClick={() => setEcomDecls(ecomDecls.length === ECOM_RULES.length ? [] : ECOM_RULES.map(r => r.id))}
+                      className="text-[10px] text-primary hover:underline cursor-pointer"
+                    >
+                      {ecomDecls.length === ECOM_RULES.length ? 'Deselect All' : 'Select All'}
+                    </button>
+                  </div>
+                  <div className="grid grid-cols-1 gap-2 max-h-[220px] overflow-y-auto p-2 bg-slate-50 dark:bg-slate-900/60 rounded-xl border border-slate-200 dark:border-slate-800">
+                    {ECOM_RULES.map(rule => {
+                      const isChecked = ecomDecls.includes(rule.id);
+                      return (
+                        <div
+                          key={rule.id}
+                          onClick={() => toggleEcomDecl(rule.id)}
+                          className={`flex items-start gap-2.5 p-2 rounded-lg text-xs cursor-pointer transition-colors border ${
+                            isChecked
+                              ? 'bg-emerald-50/60 dark:bg-emerald-950/20 border-emerald-300 dark:border-emerald-800/60 text-slate-800 dark:text-slate-200'
+                              : 'bg-white dark:bg-slate-900 border-slate-200 dark:border-slate-800 text-slate-500 opacity-70 hover:opacity-100'
+                          }`}
+                        >
+                          <input
+                            type="checkbox"
+                            checked={isChecked}
+                            onChange={() => {}}
+                            className="mt-0.5 rounded text-primary focus:ring-primary cursor-pointer"
+                          />
+                          <div className="flex flex-col">
+                            <span className="font-semibold">{rule.label}</span>
+                            <span className="text-[10px] font-mono text-text-muted">{rule.statute}</span>
+                          </div>
+                        </div>
+                      );
+                    })}
+                  </div>
+                </div>
+              </div>
+            )}
+
+            {sourceType === 'ecommerce_listing' ? (
+              <div className="flex flex-col sm:flex-row gap-3">
+                <button
+                  type="button"
+                  onClick={handleAutoScrape}
+                  className="mello-btn-primary flex-1 h-[52px] sm:h-[48px] text-xs sm:text-sm font-bold shadow-md active-press rounded-xl cursor-pointer flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
+                  disabled={loading}
+                >
+                  <Sparkles size={16} />
+                  <span>{loading ? 'Crawling & extracting via Gemini...' : '⚡ Auto-Crawl & Audit URL (Gemini AI)'}</span>
+                </button>
+                <button
+                  type="submit"
+                  className="px-4 h-[52px] sm:h-[48px] text-xs font-semibold rounded-xl cursor-pointer border border-slate-300 dark:border-slate-700 hover:border-slate-400 bg-slate-50 dark:bg-slate-800 text-text-primary"
+                  disabled={loading}
+                >
+                  Audit Checklist Only
+                </button>
+              </div>
+            ) : (
+              <button type="submit" className="mello-btn-primary w-full h-[52px] sm:h-[48px] text-sm sm:text-base font-bold shadow-md active-press rounded-xl cursor-pointer" disabled={loading}>
+                {loading ? 'Processing scan...' : 'Run Compliance Check'}
+              </button>
+            )}
           </form>
 
           <div className="mello-card-flat p-4 sm:p-6 col-span-1 md:col-span-2 flex flex-col h-[260px] md:h-[480px] bg-white dark:bg-[#0D1A2D] border border-slate-200 dark:border-slate-800 rounded-2xl shadow-xs">

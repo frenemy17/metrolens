@@ -69,7 +69,38 @@ def extract_rule_suggestions(pdf_text_or_bytes: Any) -> List[Dict[str, Any]]:
         return results
 
     except Exception as e:
-        print(f"Gemini API Error: {str(e)}")
+        print(f"Gemini API Error: {str(e)} — attempting Groq fallback...")
+        groq_key = os.getenv("GROQ_API_KEY")
+        if groq_key:
+            try:
+                from groq import Groq
+                groq_client = Groq(api_key=groq_key)
+                groq_resp = groq_client.chat.completions.create(
+                    messages=[{"role": "user", "content": prompt}],
+                    model="qwen/qwen3.8-27b",
+                    temperature=0.1,
+                    max_tokens=500
+                )
+                raw_text = groq_resp.choices[0].message.content.strip()
+                if raw_text.startswith("```json"):
+                    raw_text = raw_text.split("```json")[1].split("```")[0].strip()
+                elif raw_text.startswith("```"):
+                    raw_text = raw_text.split("```")[1].split("```")[0].strip()
+                parsed_data = json.loads(raw_text)
+                results = []
+                for item in parsed_data:
+                    results.append({
+                        "value": {
+                            "action": item.get("action"),
+                            "details": item.get("details")
+                        },
+                        "confidence": 0.95,
+                        "explanation": item.get("explanation", "Extracted by Groq AI.")
+                    })
+                return results
+            except Exception as ge:
+                print(f"Groq fallback error: {ge}")
+        
         # Fallback to mock on error
         return _mock_suggestion()
 

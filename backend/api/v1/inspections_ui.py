@@ -29,7 +29,7 @@ from sqlalchemy.future import select
 from core.models import BatchRecord, InspectionRecord
 from api.v1.inspections import rule_engine
 from core.cv.quality import calculate_blur_score, calculate_glare_score
-from ml.vision import compute_contrast_ratio
+from ml.vision import compute_contrast_ratio, recover_scale_aruco
 from ml.ocr import run_ocr_with_bboxes
 from core.cv.measurement import get_ink_row_height_px, calculate_measured_height_mm
 from ml.ai_auditor import generate_ai_auditor_analysis
@@ -295,24 +295,86 @@ customer_care, country_of_origin, ingredients"""
             if words:
                 extracted_data["brand_name"] = words[0].title()
 
-    # CV Metrology: Text Height
+    # ── Optical Metrology & Calibration ─────────────────────────────────────────
+    mm_per_px = 0.1
+    calibration_method = "ESTIMATED_DEFAULT"
+    confidence_flag = "UNRELIABLE"
+    is_calibrated = False
+
+    if img_cv is not None:
+        # 1. Attempt true ArUco fiducial marker scale recovery
+        aruco_scale = recover_scale_aruco(img_cv, marker_size_mm=50.0)
+        if aruco_scale and aruco_scale > 0:
+            mm_per_px = round(float(aruco_scale), 5)
+            calibration_method = "ARUCO_REFERENCE"
+            confidence_flag = "RELIABLE"
+            is_calibrated = True
+            print(f"[CALIB] ArUco reference marker detected: {mm_per_px:.4f} mm/px (RELIABLE)")
+        elif _calibrate_scale is not None:
+            # 2. Clamped perspective estimate
+            img_h_c, img_w_c = img_cv.shape[:2]
+            auto_corners = [
+                (10.0, 10.0),
+                (float(img_w_c - 10), 10.0),
+                (float(img_w_c - 10), float(img_h_c - 10)),
+                (10.0, float(img_h_c - 10)),
+            ]
+            try:
+                cal_result = _calibrate_scale(img_cv, auto_corners, reference_size_mm=85.6)
+                mm_per_px = cal_result["mm_px_scale"]
+                calibration_method = "PHOTO_ESTIMATE"
+                confidence_flag = "UNRELIABLE"
+                is_calibrated = False
+                print(f"[CALIB] Photo estimate: {mm_per_px:.4f} mm/px (UNRELIABLE - guard-band adjusted)")
+            except Exception as calib_err:
+                print(f"[CALIB] Calibration failed: {calib_err} — using fallback 0.1 mm/px")
+                mm_per_px = 0.1
+                calibration_method = "FALLBACK_DEFAULT"
+                confidence_flag = "UNRELIABLE"
+                is_calibrated = False
+
+    # ── CV Metrology: Target Numeral Selection for Rule 7(2) ───────────────────
     estimated_height_mm = None
+    target_bbox = None
     if img_cv is not None and ocr_result.get("bboxes"):
         bboxes = ocr_result["bboxes"]
-        target_bbox = None
         nq = extracted_data.get("net_quantity", "")
+
+        # Strategy A: Target numeral associated with extracted Net Quantity
         if nq and nq != "Not Found":
-            for b in bboxes:
-                if nq in b.get("text", ""):
-                    target_bbox = b
-                    break
+            nq_clean = str(nq).strip()
+            val_match = re.search(r'(\d+(?:\.\d+)?)\s*([a-zA-Z]+)?', nq_clean)
+            if val_match:
+                target_num = val_match.group(1)
+                target_unit = (val_match.group(2) or "").lower()
+
+                # Try compound token first (e.g. "50g", "500ml")
+                if target_unit:
+                    compound = f"{target_num}{target_unit}"
+                    for b in bboxes:
+                        if compound in b.get("text", "").lower():
+                            target_bbox = b
+                            break
+
+                # Try matching exact numeral with quantity unit in vicinity
+                if not target_bbox:
+                    for i, b in enumerate(bboxes):
+                        b_text = b.get("text", "").strip()
+                        if b_text == target_num:
+                            prev_t = bboxes[i-1].get("text", "").lower() if i > 0 else ""
+                            next_t = bboxes[i+1].get("text", "").lower() if i+1 < len(bboxes) else ""
+                            if any(u in next_t or u in prev_t for u in [target_unit, "g", "gm", "kg", "ml", "l", "net", "qty", "weight"]):
+                                target_bbox = b
+                                break
+
+        # Strategy B: Generic Net Quantity pattern (e.g. "50 g", "100 ml", "10 N")
         if not target_bbox:
             for b in bboxes:
-                if any(ch.isdigit() for ch in b.get("text", "")):
+                b_text = b.get("text", "").lower()
+                if re.search(r'\b\d+(?:\.\d+)?\s*(?:g|gm|gms|kg|ml|l|ltr|pcs|piece|pieces|n|u)\b', b_text):
                     target_bbox = b
                     break
-        if not target_bbox and bboxes:
-            target_bbox = bboxes[0]
+
         if target_bbox:
             x, y, w, h = target_bbox["x"], target_bbox["y"], target_bbox["w"], target_bbox["h"]
             pad = 5
@@ -320,28 +382,6 @@ customer_care, country_of_origin, ingredients"""
                          max(0, x-pad):min(img_cv.shape[1], x+w+pad)]
             if roi.size > 0:
                 h_px = get_ink_row_height_px(roi)
-                # ── ArUco-based calibration (Option A fallback = 0.1 mm/px) ──
-                mm_per_px = 0.1  # default fallback
-                if _calibrate_scale is not None and img_cv is not None:
-                    try:
-                        # Attempt auto-calibration using image border corners as
-                        # reference (treats full image as 85.6 mm wide, credit-card
-                        # standard — best-effort; ArUco marker not required)
-                        img_h_c, img_w_c = img_cv.shape[:2]
-                        auto_corners = [
-                            (0.0, 0.0),
-                            (float(img_w_c), 0.0),
-                            (float(img_w_c), float(img_h_c)),
-                            (0.0, float(img_h_c)),
-                        ]
-                        cal_result = _calibrate_scale(img_cv, auto_corners, reference_size_mm=85.6)
-                        if cal_result.get("confidence_flag") == "RELIABLE":
-                            mm_per_px = cal_result["mm_px_scale"]
-                            print(f"[CALIB] ArUco calibration OK: {mm_per_px:.4f} mm/px")
-                        else:
-                            print(f"[CALIB] Calibration UNRELIABLE — using fallback 0.1 mm/px")
-                    except Exception as calib_err:
-                        print(f"[CALIB] Calibration failed: {calib_err} — using fallback 0.1 mm/px")
                 estimated_height_mm = calculate_measured_height_mm(h_px, mm_per_px)
 
     # CV Metrology: PDP Area
@@ -354,15 +394,19 @@ customer_care, country_of_origin, ingredients"""
     # CV Metrology: Contrast Ratio
     contrast_ratio = None
     if img_cv is not None and ocr_result.get("bboxes"):
-        for b in ocr_result["bboxes"]:
-            if any(ch.isdigit() for ch in b.get("text", "")) and b.get("w", 0) > 5 and b.get("h", 0) > 5:
-                try:
-                    cr = compute_contrast_ratio(img_cv, b["x"], b["y"], b["w"], b["h"])
-                    if cr and cr > 0:
-                        contrast_ratio = round(cr, 2)
-                        break
-                except Exception:
-                    pass
+        # Calculate contrast on prominent text tokens
+        candidate_boxes = [b for b in ocr_result["bboxes"] if len(b.get("text", "")) >= 3 and b.get("w", 0) > 15 and b.get("h", 0) > 8]
+        if not candidate_boxes:
+            candidate_boxes = ocr_result["bboxes"]
+
+        for b in candidate_boxes:
+            try:
+                cr = compute_contrast_ratio(img_cv, b["x"], b["y"], b["w"], b["h"])
+                if cr and cr > 1.0:
+                    contrast_ratio = round(cr, 2)
+                    break
+            except Exception:
+                pass
 
     extracted_data["estimated_text_height_mm"] = estimated_height_mm
     extracted_data["raw_ocr_text"] = raw_text
@@ -541,7 +585,7 @@ customer_care, country_of_origin, ingredients"""
                 pdp_area_cm2=pdp_area_cm2,
                 printing_method="normal",
                 measured_height_mm=float(estimated_height_mm),
-                confidence_flag="normal",
+                confidence_flag=confidence_flag,
             )
             h_status       = h_eval.get("status", "PASS")
             required_height = float(h_eval.get("threshold") or 2.0)
@@ -553,7 +597,7 @@ customer_care, country_of_origin, ingredients"""
                 "status":     h_status if h_status in ("PASS", "FAIL") else "MANUAL REVIEW",
                 "detail":     (f"Measured cap height {estimated_height_mm:.2f} mm. "
                                f"Required ≥ {required_height:.1f} mm for PDP {pdp_area_cm2} cm² "
-                               f"(ILAC G8 guard-band applied)."),
+                               f"(ILAC G8 guard-band [{confidence_flag}] applied)."),
             })
         except Exception as he:
             rules.append({
@@ -567,7 +611,7 @@ customer_care, country_of_origin, ingredients"""
             "rule_id":    "r7-2-numeral-height",
             "rule_title": "Rule 7(2) — Numeral Cap Height",
             "status":     "MANUAL REVIEW",
-            "detail":     "Text height not measurable from this image angle. Manual inspection required.",
+            "detail":     "Net quantity numeral could not be isolated from this image angle for automated optical measurement. Manual optical verification required.",
         })
 
     if contrast_ratio is not None:
@@ -660,10 +704,17 @@ customer_care, country_of_origin, ingredients"""
         "metrology": {
             "numeral_measurement": {"measured_cap_height_mm": estimated_height_mm},
             "legal_requirement":   {"requiredHeightMm": required_height},
-            "uncertainty_budget":  {"expandedUncertainty_U": 0.15},
+            "uncertainty_budget":  {"expandedUncertainty_U": 0.30 if confidence_flag == "UNRELIABLE" else 0.15},
             "pdp_geometry":        {"pdpAreaCm2": pdp_area_cm2},
             "rule_9_contrast":     {"measured_contrast_ratio": contrast_ratio},
             "image_quality":       {"blur_score": round(blur, 2), "glare_ratio": round(glare, 3)},
+            "calibration": {
+                "is_calibrated": is_calibrated,
+                "calibration_method": calibration_method,
+                "confidence_flag": confidence_flag,
+                "mm_px_scale": float(round(mm_per_px, 5)),
+                "scale_px_per_mm": float(round(1.0 / mm_per_px, 2)) if mm_per_px > 0 else 0.0,
+            }
         },
     }
 
@@ -690,6 +741,7 @@ customer_care, country_of_origin, ingredients"""
             "category":     "Packaged Food",
         },
         "extracted_fields": extracted_data,
+        "raw_ocr_text":     raw_text,
         "ai_analysis":      ai_analysis,
         "officer_id":       current_user["user_id"],
         "timestamp":        datetime.utcnow().isoformat(),

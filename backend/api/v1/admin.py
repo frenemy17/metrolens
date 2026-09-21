@@ -1,6 +1,6 @@
 from fastapi import APIRouter, Depends, HTTPException, UploadFile, File, Form
 from pydantic import BaseModel
-from typing import List, Dict, Any
+from typing import List, Dict, Any, Optional
 import json
 import os
 from copy import deepcopy
@@ -20,27 +20,39 @@ class RulePublishRequest(BaseModel):
 
 @router.post("/rule-sync/upload")
 async def upload_gazette_pdf(
-    file: UploadFile = File(...),
-    current_user: dict = Depends(RoleChecker(["ADMIN"]))
+    file: Optional[UploadFile] = File(None),
+    gazette_text: Optional[str] = Form(None),
+    current_user: dict = Depends(RoleChecker(["ADMIN", "SUPERVISOR", "INSPECTOR"]))
 ):
     """
-    Accepts a gazette PDF, triggers the ML boundary for LLM extraction,
+    Accepts a gazette PDF or text, triggers the ML boundary for LLM extraction,
     and returns unconfirmed MLSuggestions.
     """
-    contents = await file.read()
+    if file:
+        contents = await file.read()
+        try:
+            text = contents.decode("utf-8", errors="ignore")
+        except Exception:
+            text = str(contents)
+        filename = file.filename
+    elif gazette_text:
+        text = gazette_text
+        filename = "gazette_notification.txt"
+    else:
+        raise HTTPException(status_code=400, detail="Either a file or gazette_text is required.")
     
     # Run the ML boundary function
-    suggestions = extract_rule_suggestions(contents)
+    suggestions = extract_rule_suggestions(text)
     
     return {
-        "filename": file.filename,
+        "filename": filename,
         "suggestions": suggestions
     }
 
 @router.post("/rule-sync/publish")
 async def publish_rulepack(
     req: RulePublishRequest,
-    current_user: dict = Depends(RoleChecker(["ADMIN"]))
+    current_user: dict = Depends(RoleChecker(["ADMIN", "SUPERVISOR", "INSPECTOR"]))
 ):
     """
     Takes human-reviewed and confirmed JSON diffs, merges them into the 

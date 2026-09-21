@@ -95,3 +95,40 @@ def test_unreliable_calibration_guard_band():
     # If difference is 0.4 > 0.30 -> FAIL
     verdict_fail = evaluate_guard_band(4.0, threshold=4.4, confidence_flag="UNRELIABLE")
     assert verdict_fail == "FAIL"
+
+def test_polarity_detection_light_on_dark():
+    # Light text on dark packaging
+    img_dark_bg = np.zeros((60, 100), dtype=np.uint8)
+    img_dark_bg[20:35, 20:80] = 255  # 15px tall bright text
+    h_measured = get_ink_row_height_px(img_dark_bg)
+    assert h_measured == 15
+
+    # Dark text on light packaging
+    img_light_bg = np.ones((60, 100), dtype=np.uint8) * 255
+    img_light_bg[20:35, 20:80] = 0  # 15px tall dark text
+    h_measured_2 = get_ink_row_height_px(img_light_bg)
+    assert h_measured_2 == 15
+
+def test_calibration_clamping_boundary_corners():
+    img = np.ones((500, 500), dtype=np.uint8) * 200
+    # Coordinates right on the image boundary [0, 500]
+    boundary_corners = [(0.0, 0.0), (500.0, 0.0), (500.0, 500.0), (0.0, 500.0)]
+    result = calibrate_scale(img, boundary_corners, reference_size_mm=50.0)
+    assert result is not None
+    assert "mm_px_scale" in result
+    assert result["mm_px_scale"] > 0
+
+def test_contrast_ratio_wcag():
+    from ml.vision import compute_contrast_ratio
+    # Black text on white background (maximum contrast ~21:1)
+    img_hi = np.ones((50, 50, 3), dtype=np.uint8) * 255
+    img_hi[15:35, 15:35] = 0
+    cr_hi = compute_contrast_ratio(img_hi, 0, 0, 50, 50)
+    assert cr_hi >= 7.0
+
+    # Low contrast: gray 100 vs gray 120
+    img_lo = np.ones((50, 50, 3), dtype=np.uint8) * 120
+    img_lo[15:35, 15:35] = 100
+    cr_lo = compute_contrast_ratio(img_lo, 0, 0, 50, 50)
+    assert cr_lo < 3.0
+

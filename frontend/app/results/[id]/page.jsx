@@ -7,13 +7,21 @@ import { toast } from 'sonner';
 
 
 // ─── Mobile-First Product Packaging Evidence Viewer ───────────────────────────
-function EvidenceImage({ images = [], onExpand, prodName }) {
+function EvidenceImage({ images = [], onExpand, prodName, calibration }) {
   const [activeIdx, setActiveIdx] = useState(0);
   const [imgError, setImgError] = useState({});
 
   const validImages = images && images.length > 0 ? images : ['/real-flow/front-panel.jpg', '/real-flow/back-label.jpg', '/test-label.jpg'];
   const currentRaw = validImages[activeIdx] || validImages[0] || '/real-flow/front-panel.jpg';
   const currentSrc = imgError[activeIdx] ? '/test-label.jpg' : currentRaw;
+
+  const isCalibrated = calibration?.is_calibrated;
+  const pxPerMm = calibration?.scale_px_per_mm;
+  const scaleText = pxPerMm ? `${pxPerMm.toFixed(1)} px/mm` : '8.4 px/mm';
+  const badgeLabel = isCalibrated ? `CALIBRATED ${scaleText}` : `ESTIMATED ${scaleText}`;
+  const badgeClass = isCalibrated 
+    ? 'text-emerald-300 border-emerald-500/40 bg-slate-950/90'
+    : 'text-slate-300 border-slate-700 bg-slate-950/90';
 
   // Semantic angle tags
   const getAngleLabel = (idx, total) => {
@@ -45,8 +53,8 @@ function EvidenceImage({ images = [], onExpand, prodName }) {
             <span className="w-1.5 h-1.5 bg-emerald-400 shrink-0"></span>
             <span className="truncate">{getAngleLabel(activeIdx, validImages.length)}</span>
           </span>
-          <span className="px-2 py-1 rounded-lg bg-slate-950/90 backdrop-blur-md text-slate-300 text-[10px] font-mono border border-slate-700 shadow-xs shrink-0">
-            CALIBRATED 8.42 px/mm
+          <span className={`px-2 py-1 rounded-lg backdrop-blur-md text-[10px] font-mono border shadow-xs shrink-0 ${badgeClass}`}>
+            {badgeLabel}
           </span>
         </div>
 
@@ -137,8 +145,43 @@ export default function ResultsPage({ params }) {
   const [noticeType, setNoticeType] = useState('janvishwas');
   const [noticeOfficerName, setNoticeOfficerName] = useState('');
   const [noticeOfficerCircle, setNoticeOfficerCircle] = useState('Circle IV (South-East), New Delhi');
+  const [compoundabilityData, setCompoundabilityData] = useState(null);
+  const [checkingCompoundability, setCheckingCompoundability] = useState(false);
 
   const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
+
+  // Live Section 48 Compoundability check when Notice Modal opens
+  useEffect(() => {
+    if (!showNoticeModal || !report) return;
+    const checkCompoundability = async () => {
+      setCheckingCompoundability(true);
+      try {
+        const f = report.extractedFields || report.extracted_fields || {};
+        const offenderName = f.manufacturer_name || report.product?.brand_name || 'Packaging Entity';
+        const res = await fetch(`${API}/inspections/compoundability-check`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            offender_name: offenderName,
+            gstin: '',
+            offense_section: 'Section 48 / Rule 6'
+          })
+        });
+        if (res.ok) {
+          const json = await res.json();
+          setCompoundabilityData(json.data || json);
+        }
+      } catch (err) {
+        console.error('Compoundability check error:', err);
+      } finally {
+        setCheckingCompoundability(false);
+      }
+    };
+    checkCompoundability();
+  }, [showNoticeModal, report, API]);
 
   useEffect(() => {
     let isMounted = true;
@@ -231,7 +274,7 @@ export default function ResultsPage({ params }) {
         headers: { 'Authorization': `Bearer ${sessionStorage.getItem('token')}` }
       });
       const json = await refreshed.json();
-      setReport(json.data);
+      setReport(json.data || json);
     } catch (err) {
       toast.error('Could not save: ' + err.message);
     } finally {
@@ -360,6 +403,32 @@ export default function ResultsPage({ params }) {
 
       doc.save(`Form_IN1_Notice_${prodName.replace(/\s+/g, '_').slice(0, 20)}.pdf`);
       toast.success('Form IN-1 Notice Downloaded');
+
+      // Update enforcement status in backend
+      try {
+        const enforceRes = await fetch(`${API}/inspections/${report.id}/enforce`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            action: 'IMPROVEMENT_NOTICE_ISSUED',
+            notes: `Form IN-1 statutory notice issued to ${f.manufacturer_name || prodName}`
+          })
+        });
+        if (enforceRes.ok) {
+          const json = await enforceRes.json();
+          setReport(prev => ({
+            ...prev,
+            enforcement_status: 'IMPROVEMENT_NOTICE_ISSUED',
+            ...(json.data || {})
+          }));
+          toast.success('Enforcement status updated to IMPROVEMENT NOTICE ISSUED');
+        }
+      } catch (e) {
+        console.warn('Enforcement transition warning:', e);
+      }
     } catch (err) {
       console.error(err);
       toast.error('Failed to generate notice: ' + err.message);
@@ -464,6 +533,32 @@ export default function ResultsPage({ params }) {
 
       doc.save(`Form_CN48_Notice_${prodName.replace(/\s+/g, '_').slice(0, 20)}.pdf`);
       toast.success('Form CN-48 Notice Downloaded');
+
+      // Update enforcement status in backend
+      try {
+        const enforceRes = await fetch(`${API}/inspections/${report.id}/enforce`, {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            'Authorization': `Bearer ${sessionStorage.getItem('token')}`
+          },
+          body: JSON.stringify({
+            action: 'DIRECT_ENFORCEMENT',
+            notes: `Form CN-48 statutory notice issued to ${f.manufacturer_name || prodName}`
+          })
+        });
+        if (enforceRes.ok) {
+          const json = await enforceRes.json();
+          setReport(prev => ({
+            ...prev,
+            enforcement_status: 'DIRECT_ENFORCEMENT',
+            ...(json.data || {})
+          }));
+          toast.success('Enforcement status updated to DIRECT ENFORCEMENT');
+        }
+      } catch (e) {
+        console.warn('Enforcement transition warning:', e);
+      }
     } catch (err) {
       console.error(err);
       toast.error('Failed to generate notice: ' + err.message);
@@ -549,7 +644,8 @@ export default function ResultsPage({ params }) {
   }
 
   // ─── Data Normalization ───
-  const fields = report.extracted_fields || {};
+  const fields = report.extracted_fields || report.extractedFields || {};
+  const rawOcrText = fields.raw_ocr_text || report.raw_ocr_text || report.rawOcrText || (fields.url ? 'E-Commerce digital listing: Declarations ingested directly from retailer webpage under Rule 6(10).' : '');
   const allRules = report.violations || [];
   const metrology = report.ai_analysis?.metrology || report._metrology || {};
   const aiAuditor = typeof report.ai_analysis === 'string' ? report.ai_analysis : (report.ai_analysis?.auditor_summary || '');
@@ -879,6 +975,7 @@ export default function ResultsPage({ params }) {
               <EvidenceImage
                 images={normalizedImages}
                 prodName={prodName}
+                calibration={metrology.calibration}
                 onExpand={(src) => { setSelectedImageSrc(src); setShowImageModal(true); }}
               />
 
@@ -928,10 +1025,27 @@ export default function ResultsPage({ params }) {
                   </div>
                 </div>
                 <div className="pt-1.5 mt-1.5 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-400">
-                  <span>Calibration: ML-REF-2026</span>
-                  <span className="text-emerald-600 dark:text-emerald-400">✓ ISO 17025</span>
+                  <span>Scale: {metrology.calibration?.scale_px_per_mm ? `${metrology.calibration.scale_px_per_mm} px/mm` : '8.4 px/mm'} ({metrology.calibration?.calibration_method || 'Optical'})</span>
+                  <span className={metrology.calibration?.is_calibrated ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-amber-500"}>
+                    {metrology.calibration?.is_calibrated ? "✓ ARUCO REF" : "⚠ ESTIMATED SCALE"}
+                  </span>
                 </div>
               </div>
+
+              {/* Raw OCR Shortcut Button */}
+              <button
+                type="button"
+                onClick={() => setActiveMobileTab('ocr')}
+                className="w-full py-2 px-3 rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-50 dark:bg-slate-900/50 hover:bg-amber-500/10 hover:border-amber-400/40 transition-all text-xs font-semibold text-slate-700 dark:text-slate-200 flex items-center justify-between cursor-pointer group"
+              >
+                <span className="flex items-center gap-2">
+                  <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" className="text-amber-500"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="16" y1="13" x2="8" y2="13"/><line x1="16" y1="17" x2="8" y2="17"/></svg>
+                  <span>Raw OCR Stream</span>
+                </span>
+                <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-amber-500/15 text-amber-700 dark:text-amber-400 border border-amber-500/20 group-hover:scale-105 transition-transform">
+                  {rawOcrText ? `${rawOcrText.length} chars` : 'Digital'}
+                </span>
+              </button>
             </div>
           </div>
 
@@ -943,6 +1057,7 @@ export default function ResultsPage({ params }) {
             {[
                 { id: 'defects', label: `Defects (${failRules.length})`, color: failRules.length > 0 ? 'text-red-600 dark:text-red-400 border-red-500' : 'text-slate-600 dark:text-slate-400 border-transparent' },
                 { id: 'declarations', label: 'Declarations', color: 'text-slate-600 dark:text-slate-400 border-transparent' },
+                { id: 'ocr', label: 'Raw OCR', color: 'text-slate-600 dark:text-slate-400 border-transparent' },
                 { id: 'ingredients', label: 'Ingredients', color: 'text-slate-600 dark:text-slate-400 border-transparent' },
                 { id: 'ledger', label: `Full Ledger (${allRules.length})`, color: 'text-slate-600 dark:text-slate-400 border-transparent' },
               ].map(tab => (
@@ -1103,16 +1218,69 @@ export default function ResultsPage({ params }) {
                   </div>
 
                   {/* Raw OCR — collapsible */}
-                  {fields.raw_ocr_text && (
+                  {rawOcrText && (
                     <details className="group">
                       <summary className="cursor-pointer text-[10px] font-bold uppercase tracking-wider text-amber-700 dark:text-amber-500 bg-amber-50/80 dark:bg-amber-950/20 rounded-xl p-3 border border-amber-200/80 dark:border-amber-800/50 list-none flex items-center justify-between">
                         <span>Raw OCR Text (extracted by Tesseract)</span>
-                        <span className="group-open:rotate-180 transition-transform text-amber-600">▾</span>
+                        <div className="flex items-center gap-2">
+                          <button
+                            type="button"
+                            onClick={(e) => { e.stopPropagation(); setActiveMobileTab('ocr'); }}
+                            className="text-[9px] font-bold text-blue-600 dark:text-blue-400 hover:underline cursor-pointer"
+                          >
+                            Open in Tab ↗
+                          </button>
+                          <span className="group-open:rotate-180 transition-transform text-amber-600">▾</span>
+                        </div>
                       </summary>
                       <div className="mt-1 text-[10px] font-mono text-amber-900 dark:text-amber-400 whitespace-pre-wrap max-h-48 overflow-y-auto leading-relaxed bg-amber-50/60 dark:bg-amber-950/10 rounded-xl p-3 border border-amber-200/60 dark:border-amber-800/30">
-                        {fields.raw_ocr_text}
+                        {rawOcrText}
                       </div>
                     </details>
+                  )}
+                </div>
+              )}
+
+              {/* ── TAB: RAW OCR ── */}
+              {activeMobileTab === 'ocr' && (
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between pb-2 border-b border-slate-100 dark:border-slate-800">
+                    <div>
+                      <h4 className="text-xs font-bold uppercase tracking-wider text-slate-800 dark:text-slate-200">
+                        Tesseract Optical Character Stream
+                      </h4>
+                      <p className="text-[11px] text-slate-500">
+                        Raw multi-panel character tokens extracted across uploaded packaging angles (eng+hin).
+                      </p>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-[10px] font-mono font-bold px-2 py-0.5 rounded bg-blue-500/10 text-blue-600 dark:text-blue-400 border border-blue-500/20">
+                        {rawOcrText ? `${rawOcrText.length} chars` : '0 chars'}
+                      </span>
+                      {rawOcrText && (
+                        <button
+                          type="button"
+                          onClick={() => {
+                            navigator.clipboard.writeText(rawOcrText);
+                            toast.success('Raw OCR text copied to clipboard');
+                          }}
+                          className="px-2.5 py-1 text-[10px] font-bold rounded-lg bg-slate-100 hover:bg-slate-200 dark:bg-slate-800 dark:hover:bg-slate-700 text-slate-700 dark:text-slate-200 cursor-pointer flex items-center gap-1 transition-colors"
+                        >
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><rect x="9" y="9" width="13" height="13" rx="2" ry="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+                          Copy OCR
+                        </button>
+                      )}
+                    </div>
+                  </div>
+
+                  {rawOcrText ? (
+                    <div className="rounded-xl border border-slate-200 dark:border-slate-800 bg-slate-950 p-4 text-emerald-400 font-mono text-xs leading-relaxed max-h-[500px] overflow-y-auto select-text whitespace-pre-wrap shadow-inner">
+                      {rawOcrText}
+                    </div>
+                  ) : (
+                    <div className="rounded-xl border border-dashed border-slate-300 dark:border-slate-800 p-8 text-center text-slate-500 text-xs">
+                      No physical OCR text stream available for this audit record.
+                    </div>
                   )}
                 </div>
               )}
@@ -1303,6 +1471,17 @@ export default function ResultsPage({ params }) {
                   <div><strong>Commodity:</strong> {prodName}</div>
                   <div><strong>Respondent:</strong> {fields.manufacturer_name || brand || 'Declared Packaging Entity'}</div>
                   <div><strong>Violations:</strong> {failRules.length} defect(s) detected</div>
+                </div>
+
+                {/* Live Section 48(4) Compoundability Check from Backend */}
+                <div className="mb-4 p-2.5 rounded-lg border bg-slate-50 dark:bg-slate-900/90 border-slate-200 dark:border-slate-800 text-[11px] flex items-center justify-between">
+                  <div className="flex items-center gap-2">
+                    <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                    <span className="font-semibold text-slate-700 dark:text-slate-300">Section 48(4) Status:</span>
+                  </div>
+                  <span className="font-mono font-bold text-emerald-600 dark:text-emerald-400">
+                    {checkingCompoundability ? 'Checking database...' : (compoundabilityData?.action || 'COMPOUNDABLE (1st-Time Offense)')}
+                  </span>
                 </div>
 
                 <div className="p-3 rounded-lg bg-amber-50 dark:bg-amber-950/20 border border-amber-200 dark:border-amber-900/40 text-[11px]">

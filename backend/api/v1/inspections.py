@@ -153,7 +153,259 @@ async def get_inspection(
     if not record:
         raise HTTPException(status_code=404, detail="Inspection not found")
     
-    return record.data
+    # Return both direct dict and wrapped in { "data": ... } for complete frontend compatibility
+    return {"data": record.data, **(record.data or {})}
+
+class InspectionUpdate(BaseModel):
+    extractedFields: Optional[dict] = None
+    extracted_fields: Optional[dict] = None
+    productName: Optional[str] = None
+    brandName: Optional[str] = None
+
+@router.put("/{id}")
+async def update_inspection(
+    id: str,
+    req: InspectionUpdate,
+    current_user: dict = Depends(RoleChecker(["INSPECTOR", "SUPERVISOR", "ADMIN"])),
+    db: AsyncSession = Depends(get_db)
+):
+    from core.models import InspectionRecord
+    from sqlalchemy.future import select
+    from sqlalchemy.orm.attributes import flag_modified
+    import re
+    from datetime import date
+    from dateutil import parser as dateparser
+
+    result = await db.execute(select(InspectionRecord).where(InspectionRecord.id == id))
+    record = result.scalars().first()
+    if not record:
+        raise HTTPException(status_code=404, detail="Inspection not found")
+
+    inspection = dict(record.data or {})
+    extracted = dict(inspection.get("extracted_fields") or {})
+    
+    new_fields = req.extractedFields or req.extracted_fields or {}
+    for k, v in new_fields.items():
+        extracted[k] = v
+
+    if req.productName:
+        extracted["product_name"] = req.productName
+    if req.brandName:
+        extracted["brand_name"] = req.brandName
+
+    inspection["extracted_fields"] = extracted
+
+    prod = dict(inspection.get("product") or {})
+    if extracted.get("product_name"):
+        prod["product_name"] = extracted["product_name"]
+    if extracted.get("brand_name"):
+        prod["brand_name"] = extracted["brand_name"]
+    inspection["product"] = prod
+
+    def _is_present(val) -> bool:
+        return bool(val) and str(val).strip().lower() not in (
+            "not found", "null", "none", "", "n/a", "na"
+        )
+
+    present_decls = []
+    field_to_decl = {
+        "manufacturer_name": "r6-1a-mfr-name-address",
+        "country_of_origin": "r6-1aa-country-of-origin",
+        "product_name":      "r6-1b-generic-name",
+        "net_quantity":      "r6-1c-net-quantity",
+        "mfg_date":          "r6-1d-mfg-month-year",
+        "best_before":       "r6-1da-best-before-use-by",
+        "customer_care":     "r6-2-consumer-care",
+    }
+    for field, decl_id in field_to_decl.items():
+        if _is_present(extracted.get(field)):
+            present_decls.append(decl_id)
+
+    v1_rulepack = rule_engine.get_rulepack("v1")
+    inspection_context = {
+        "is_imported": False,
+        "commodity_may_become_unfit_over_time": True,
+        "commodity_size_relevant_to_sale": False,
+    }
+    
+    decl_evals = rule_engine.evaluate_mandatory_declarations(
+        v1_rulepack, present_decls, inspection_context
+    ) if v1_rulepack else []
+
+    rules = []
+    defects = 0
+
+    rule_descriptions = {
+        "r6-1a-mfr-name-address": "Name and complete address of manufacturer/packer/importer on label.",
+        "r6-1aa-country-of-origin": "Country of origin declared (mandatory for imported goods).",
+        "r6-1b-generic-name": "Generic/common name of the packaged commodity declared.",
+        "r6-1c-net-quantity": "Net quantity in standard SI unit of weight or measure declared.",
+        "r6-1d-mfg-month-year": "Month and year of manufacture/packing declared on label.",
+        "r6-1da-best-before-use-by": "Best Before / Use By / Expiry date declared (required for perishable food).",
+        "r6-1e-mrp": "Maximum Retail Price (MRP) inclusive of all taxes declared.",
+        "r6-2-consumer-care": "Consumer Care contact: name, address, telephone number or email declared.",
+    }
+
+    for ev in decl_evals:
+        st = ev.get("status", "FAIL")
+        if st == "FAIL":
+            defects += 1
+        rules.append({
+            "rule_id": ev["rule_id"],
+            "rule_title": ev.get("citation", ev["rule_id"]),
+            "status": st,
+            "detail": rule_descriptions.get(ev["rule_id"], "Declaration present." if st == "PASS" else "Mandatory declaration missing."),
+        })
+
+    # MRP Check
+    mrp_val = extracted.get("mrp")
+    raw_ocr = str(extracted.get("raw_ocr_text", "")).lower()
+    if not _is_present(mrp_val):
+        defects += 1
+        rules.append({
+            "rule_id": "r6-1e-mrp",
+            "rule_title": "Rule 6(1)(e) — Maximum Retail Price (MRP)",
+            "status": "FAIL",
+            "detail": "Maximum Retail Price (MRP) declaration not found on label.",
+        })
+    else:
+        has_tax = any(q in raw_ocr for q in ["incl", "inclusive", "taxes", "tax", "all taxes"]) or "incl" in str(mrp_val).lower()
+        if has_tax:
+            rules.append({
+                "rule_id": "r6-1e-mrp",
+                "rule_title": "Rule 6(1)(e) — Maximum Retail Price (MRP)",
+                "status": "PASS",
+                "detail": f"MRP ₹{mrp_val} declared inclusive of all taxes in accordance with Rule 6(1)(e).",
+            })
+        else:
+            defects += 1
+            rules.append({
+                "rule_id": "r6-1e-mrp",
+                "rule_title": "Rule 6(1)(e) — Maximum Retail Price (MRP)",
+                "status": "POTENTIAL NON-COMPLIANCE",
+                "detail": f"MRP ₹{mrp_val} present, but missing explicit 'inclusive of all taxes' qualifier mandatory under Rule 6(1)(e).",
+            })
+
+    # Unit Sale Price (USP)
+    usp_val = extracted.get("unit_sale_price")
+    nq_val = extracted.get("net_quantity")
+    if _is_present(usp_val):
+        rules.append({
+            "rule_id": "r6-11-unit-sale-price",
+            "rule_title": "Rule 6(11) — Unit Sale Price (USP)",
+            "status": "PASS",
+            "detail": f"Unit Sale Price '{usp_val}' declared as required under Rule 6(11).",
+        })
+    elif _is_present(nq_val) and _is_present(mrp_val):
+        try:
+            nq_clean = re.sub(r"[^\d.]", "", str(nq_val))
+            mrp_clean = re.sub(r"[^\d.]", "", str(mrp_val))
+            if nq_clean and mrp_clean:
+                nq_num = float(nq_clean)
+                mrp_num = float(mrp_clean)
+                unit = extracted.get("net_quantity_unit", "g")
+                if nq_num > 1:
+                    computed_usp = round(mrp_num / nq_num, 2)
+                    rules.append({
+                        "rule_id": "r6-11-unit-sale-price",
+                        "rule_title": "Rule 6(11) — Unit Sale Price (USP)",
+                        "status": "POTENTIAL NON-COMPLIANCE",
+                        "detail": f"Unit Sale Price missing. Recommended declaration: ₹{computed_usp}/{unit} (calculated from ₹{mrp_val} for {nq_val}{unit}). Mandatory under Rule 6(11).",
+                    })
+        except Exception:
+            pass
+
+    # FSSAI License
+    fssai_val = extracted.get("fssai_license")
+    fssai_pass = _is_present(fssai_val)
+    if not fssai_pass:
+        defects += 1
+    rules.append({
+        "rule_id": "r-fssai-license",
+        "rule_title": "FSSAI License No. (FSS Act, 2006)",
+        "status": "PASS" if fssai_pass else "FAIL",
+        "detail": f"FSSAI Lic. No. {fssai_val} found on label." if fssai_pass else "FSSAI License Number absent. Mandatory for all food articles.",
+    })
+
+    # Ingredients
+    ingr_val = extracted.get("ingredients")
+    ingr_pass = _is_present(ingr_val)
+    if not ingr_pass:
+        defects += 1
+    rules.append({
+        "rule_id": "r-fssai-ingredients",
+        "rule_title": "Ingredients List (FSS Regulations, 2011)",
+        "status": "PASS" if ingr_pass else "FAIL",
+        "detail": "Ingredients list declared on label." if ingr_pass else "Ingredients list absent. Required under FSS Regulations.",
+    })
+
+    # Expiry Check
+    bb_val = extracted.get("best_before")
+    if _is_present(bb_val):
+        try:
+            exp_date = dateparser.parse(str(bb_val), dayfirst=True, fuzzy=True).date()
+            if exp_date < date.today():
+                defects += 1
+                rules.append({
+                    "rule_id": "r-expiry-check",
+                    "rule_title": "Expiry / Best Before Date Check",
+                    "status": "FAIL",
+                    "detail": f"Product EXPIRED. Best before date '{bb_val}' is past today ({date.today().isoformat()}).",
+                })
+            else:
+                days_left = (exp_date - date.today()).days
+                rules.append({
+                    "rule_id": "r-expiry-check",
+                    "rule_title": "Expiry / Best Before Date Check",
+                    "status": "PASS",
+                    "detail": f"Product within shelf life. Expires {bb_val} ({days_left} days remaining).",
+                })
+        except Exception:
+            rules.append({
+                "rule_id": "r-expiry-check",
+                "rule_title": "Expiry / Best Before Date Check",
+                "status": "MANUAL REVIEW",
+                "detail": f"Could not parse best before date '{bb_val}'. Manual verification required.",
+            })
+
+    # Retain existing metrology evaluations (numeral height, contrast, etc.)
+    old_violations = inspection.get("violations", [])
+    for v in old_violations:
+        vid = v.get("rule_id", "")
+        if vid in ["r7-2-numeral-height", "r9-1b-contrast", "r12-6-misleading-wording"]:
+            if v.get("status") == "FAIL":
+                defects += 1
+            rules.append(v)
+
+    hard_fails = [r for r in rules if r["status"] == "FAIL"]
+    soft_fails = [r for r in rules if r["status"] == "POTENTIAL NON-COMPLIANCE"]
+
+    if len(hard_fails) == 0 and len(soft_fails) == 0:
+        overall_compliance = "COMPLIANT"
+    elif len(hard_fails) > 0:
+        overall_compliance = "NON-COMPLIANT"
+    else:
+        overall_compliance = "POTENTIAL NON-COMPLIANCE"
+
+    compliance_score = max(0, 100 - (len(hard_fails) * 15) - (len(soft_fails) * 7))
+
+    inspection["violations"] = rules
+    inspection["total_violations"] = defects
+    inspection["high_violations"] = len(hard_fails)
+    inspection["overall_compliance"] = overall_compliance
+    inspection["overallStatus"] = overall_compliance
+    inspection["compliance_score"] = compliance_score
+
+    record.data = inspection
+    flag_modified(record, "data")
+    await db.commit()
+    await db.refresh(record)
+
+    return {
+        "status": "success",
+        "data": record.data,
+        **(record.data or {})
+    }
 
 @router.post("/{id}/images")
 async def upload_image(

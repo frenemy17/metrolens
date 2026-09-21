@@ -26,6 +26,7 @@ from api.v1.enforcement import router as enforcement_router
 from api.v1.admin import router as admin_router
 from api.v1.dashboard import router as dashboard_router
 from api.v1.inspections_ui import router as inspections_ui_router
+from api.v1.validation import router as validation_router
 
 from core.database import engine, Base
 import core.models # Ensure models are loaded
@@ -54,6 +55,7 @@ app.include_router(ecommerce_router, prefix="/api/v1/ecommerce", tags=["ecommerc
 app.include_router(admin_router, prefix="/api/v1/admin", tags=["admin"])
 app.include_router(dashboard_router, prefix="/api/v1/dashboard", tags=["dashboard"])
 app.include_router(inspections_ui_router, prefix="/api/v1/inspections", tags=["inspections_ui"])
+app.include_router(validation_router, prefix="/api/v1/validation", tags=["validation"])
 
 @app.get("/health")
 async def health_check():
