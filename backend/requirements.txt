@@ -3,9 +3,8 @@ pydantic
 pydantic-settings
 uvicorn
 sqlalchemy[asyncio]
+aiosqlite
 alembic
-psycopg2-binary
-asyncpg
 opencv-python-headless
 pytesseract
 pytest
@@ -14,5 +13,9 @@ Pillow
 numpy
 python-multipart
 python-jose[cryptography]
-passlib[bcrypt]
+bcrypt
 httpx
+groq
+python-dateutil
+python-dotenv
+google-generativeai

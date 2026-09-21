@@ -2,9 +2,10 @@ from datetime import datetime, timedelta, timezone
 from typing import Any, Union
 from jose import jwt
 import bcrypt
+import os
 
-# In production, this should be an environment variable
-SECRET_KEY = "dummy-secret-key-for-development"
+# In production, set JWT_SECRET as an environment variable on Render/Vercel
+SECRET_KEY = os.environ.get("JWT_SECRET", "change-me-in-production-set-JWT_SECRET-env-var")
 ALGORITHM = "HS256"
 ACCESS_TOKEN_EXPIRE_MINUTES = 60 * 24 * 7  # 1 week
 
