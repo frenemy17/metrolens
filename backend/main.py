@@ -1,5 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
 from contextlib import asynccontextmanager
 import os
 
@@ -31,6 +32,9 @@ from api.v1.validation import router as validation_router
 from core.database import engine, Base
 import core.models # Ensure models are loaded
 
+UPLOADS_DIR = os.path.join(os.path.dirname(__file__), "uploads")
+os.makedirs(UPLOADS_DIR, exist_ok=True)
+
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     async with engine.begin() as conn:
@@ -46,6 +50,8 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+app.mount("/uploads", StaticFiles(directory=UPLOADS_DIR), name="uploads")
 
 app.include_router(auth_router, prefix="/api/v1/auth", tags=["auth"])
 app.include_router(inspections_router, prefix="/api/v1/inspections", tags=["inspections"])

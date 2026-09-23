@@ -78,8 +78,14 @@ async def ui_upload_batch(
     blur, glare, is_valid = 15.0, 0.05, True
     ocr_result = {"value": "", "bboxes": []}
 
-    uploads_dir = os.path.join(os.path.dirname(__file__), "../../../frontend/public/uploads")
+    uploads_dir = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "uploads")
     os.makedirs(uploads_dir, exist_ok=True)
+    frontend_uploads = os.path.join(os.path.dirname(__file__), "../../../frontend/public/uploads")
+    if os.path.exists(os.path.dirname(frontend_uploads)):
+        try:
+            os.makedirs(frontend_uploads, exist_ok=True)
+        except Exception:
+            pass
 
     for idx, img_file in enumerate(images):
         file_bytes = await img_file.read()
@@ -89,6 +95,12 @@ async def ui_upload_batch(
         fp = os.path.join(uploads_dir, fn)
         with open(fp, "wb") as f:
             f.write(file_bytes)
+        if os.path.exists(frontend_uploads):
+            try:
+                with open(os.path.join(frontend_uploads, fn), "wb") as f_fe:
+                    f_fe.write(file_bytes)
+            except Exception:
+                pass
         uploaded_urls.append(f"/uploads/{fn}")
 
         arr = np.frombuffer(file_bytes, np.uint8)

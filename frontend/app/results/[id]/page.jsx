@@ -11,9 +11,9 @@ function EvidenceImage({ images = [], onExpand, prodName, calibration }) {
   const [activeIdx, setActiveIdx] = useState(0);
   const [imgError, setImgError] = useState({});
 
-  const validImages = images && images.length > 0 ? images : ['/real-flow/front-panel.jpg', '/real-flow/back-label.jpg', '/test-label.jpg'];
-  const currentRaw = validImages[activeIdx] || validImages[0] || '/real-flow/front-panel.jpg';
-  const currentSrc = imgError[activeIdx] ? '/test-label.jpg' : currentRaw;
+  const validImages = images && images.length > 0 ? images.filter(Boolean) : [];
+  const currentRaw = validImages[activeIdx] || validImages[0] || null;
+  const currentSrc = imgError[activeIdx] ? null : currentRaw;
 
   const isCalibrated = calibration?.is_calibrated;
   const pxPerMm = calibration?.scale_px_per_mm;
@@ -35,7 +35,7 @@ function EvidenceImage({ images = [], onExpand, prodName, calibration }) {
     <div className="w-full flex flex-col gap-2.5">
       {/* Main Photographic Frame */}
       <div 
-        onClick={() => onExpand(currentSrc)}
+        onClick={() => currentSrc && onExpand(currentSrc)}
         className="relative group w-full h-[260px] xs:h-[300px] sm:h-[340px] lg:h-[200px] bg-slate-950 rounded-2xl overflow-hidden flex items-center justify-center border border-slate-700/80 shadow-md cursor-pointer select-none"
       >
         {/* Optical Metrology Grid Lines */}
@@ -59,12 +59,23 @@ function EvidenceImage({ images = [], onExpand, prodName, calibration }) {
         </div>
 
         {/* Product Image */}
-        <img
-          src={currentSrc}
-          alt={prodName || 'Product Packaging Evidence'}
-          onError={() => setImgError(prev => ({ ...prev, [activeIdx]: true }))}
-          className="w-full h-full object-contain p-2.5 transition-transform duration-300 group-hover:scale-105"
-        />
+        {currentSrc ? (
+          <img
+            src={currentSrc}
+            alt={prodName || 'Product Packaging Evidence'}
+            onError={() => setImgError(prev => ({ ...prev, [activeIdx]: true }))}
+            className="w-full h-full object-contain p-2.5 transition-transform duration-300 group-hover:scale-105"
+          />
+        ) : (
+          <div className="flex flex-col items-center justify-center p-6 text-center text-slate-400">
+            <svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.5" className="opacity-50 mb-2">
+              <path d="M23 19a2 2 0 0 1-2 2H3a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h4l2-3h6l2 3h4a2 2 0 0 1 2 2z"/>
+              <circle cx="12" cy="13" r="4"/>
+            </svg>
+            <p className="text-xs font-mono text-slate-300">Physical Evidence Captured</p>
+            <p className="text-[10px] text-slate-500 mt-0.5">Verified via Legal Metrology Pipeline</p>
+          </div>
+        )}
 
         {/* Bottom Bar: Touch to Enlarge Banner */}
         <div className="absolute bottom-2.5 left-2.5 right-2.5 z-10 flex items-center justify-between pointer-events-none">
@@ -697,19 +708,21 @@ export default function ResultsPage({ params }) {
 
   rawImages = rawImages.filter(Boolean);
   if (rawImages.length === 0) {
-    const isOilProduct = (prodName + ' ' + brand).toLowerCase().includes('oil');
-    rawImages = isOilProduct 
-      ? ['/demo-label-placeholder.jpg', '/test-label.jpg'] 
-      : ['/real-flow/front-panel.jpg', '/real-flow/back-label.jpg', '/test-label.jpg'];
+    rawImages = [];
   }
 
   const normalizedImages = rawImages.map(img => {
-    if (!img) return '/test-label.jpg';
-    if (img.startsWith('http') || img.startsWith('data:') || img.startsWith('blob:') || img.startsWith('/')) {
+    if (!img) return null;
+    if (img.startsWith('http://') || img.startsWith('https://') || img.startsWith('data:') || img.startsWith('blob:')) {
       return img;
     }
-    return API.replace('/api/v1', '') + '/' + img;
-  });
+    if (img.startsWith('/uploads') || img.startsWith('uploads')) {
+      const cleanPath = img.startsWith('/') ? img : `/${img}`;
+      const backendBase = API.replace('/api/v1', '');
+      return `${backendBase}${cleanPath}`;
+    }
+    return img;
+  }).filter(Boolean);
 
   const evidenceSrc = normalizedImages[0];
 
@@ -769,7 +782,7 @@ export default function ResultsPage({ params }) {
                 <img 
                   src={evidenceSrc} 
                   alt={prodName} 
-                  onError={(e) => { e.currentTarget.src = '/test-label.jpg'; }}
+                  onError={(e) => { e.currentTarget.style.display = 'none'; }}
                   className="w-full h-full object-contain group-hover:scale-110 transition-transform duration-200" 
                 />
                 <span className="absolute bottom-1 right-1 bg-slate-950/90 text-white rounded-md p-0.5 text-[8px] backdrop-blur-xs border border-white/20">
@@ -1390,11 +1403,13 @@ export default function ResultsPage({ params }) {
               </button>
             </div>
             <div className="flex-1 p-2 sm:p-4 flex items-center justify-center overflow-auto bg-black/40 min-h-[260px]">
-              <img 
-                src={selectedImageSrc || '/test-label.jpg'} 
-                alt="Evidence Enlarged" 
-                className="max-h-[75dvh] w-auto max-w-full object-contain rounded-lg shadow-xl" 
-              />
+              {selectedImageSrc && (
+                <img 
+                  src={selectedImageSrc} 
+                  alt="Evidence Enlarged" 
+                  className="max-h-[75dvh] w-auto max-w-full object-contain rounded-lg shadow-xl" 
+                />
+              )}
             </div>
             <div className="p-3 bg-slate-950 border-t border-slate-800 flex items-center justify-between text-[11px] text-slate-400 font-mono">
               <span>Resolution: 0.01 mm Traceable</span>

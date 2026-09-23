@@ -4,6 +4,7 @@ pydantic-settings
 uvicorn
 sqlalchemy[asyncio]
 aiosqlite
+asyncpg
 alembic
 opencv-python-headless
 pytesseract
