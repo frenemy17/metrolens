@@ -24,7 +24,7 @@ export const viewport = {
 
 export const metadata = {
   title: 'MetroLens',
-  description: 'Legal Metrology Compliance Checker',
+  description: 'Legal Metrology Statutory Verification & Compliance Inspection System',
   icons: {
     icon: '/icon.png',
     shortcut: '/icon.png',

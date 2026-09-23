@@ -100,7 +100,7 @@ export default function BatchPage({ params }) {
                       <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="m7.5 4.27 9 5.15"/><path d="M21 8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16Z"/><path d="m3.3 7 8.7 5 8.7-5"/><path d="M12 22V12"/></svg>
                     </div>
                     <h2 className="text-lg sm:text-[22px] font-medium text-text-primary mb-2">Please Scan One Item At A Time</h2>
-                    <p className="text-xs sm:text-sm text-text-secondary mb-6 max-w-md mx-auto">You uploaded photos of different products. The AI requires all photos in a single batch to be of the same item (e.g., front and back of the same bottle).</p>
+                    <p className="text-xs sm:text-sm text-text-secondary mb-6 max-w-md mx-auto">You uploaded photos of different products. All photos in a single inspection batch must belong to the same item (e.g., front and back panels of the same package).</p>
                   </>
                ) : (
                  <>
@@ -128,7 +128,7 @@ export default function BatchPage({ params }) {
                   <Package className="w-12 h-12 sm:w-14 sm:h-14 text-text-muted/40 mb-4" />
                   <h3 className="text-lg sm:text-xl font-medium text-text-primary mb-2">No FMCG Products Detected</h3>
                   <p className="text-xs sm:text-sm text-text-secondary text-center max-w-sm">
-                    The AI could not identify any valid consumer packaging in this image. Please ensure the label is clearly visible and try again.
+                    No valid consumer packaging could be identified in this image. Ensure the commodity label is clearly visible, in focus, and within the frame.
                   </p>
                   <button onClick={() => router.push('/upload')} className="mello-btn-secondary mt-6">Scan New Image</button>
                 </div>

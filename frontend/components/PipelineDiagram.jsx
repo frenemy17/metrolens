@@ -11,7 +11,7 @@ export default function PipelineDiagram() {
 
   const nodes = [
     { id: 1, label: "Image Upload", tooltip: "High-res raw image ingestion" },
-    { id: 2, label: "OCR Extraction", tooltip: "Tesseract OCR + Gemini Vision fallback" },
+    { id: 2, label: "OCR Extraction", tooltip: "Optical Character Recognition & Multi-Panel Text Extraction" },
     { id: 3, label: "Rule Validation", tooltip: "Deterministic rules engine" },
     { id: 4, label: "Compliance Report", tooltip: "PDF generation & citations" },
     { id: 5, label: "Dashboard", tooltip: "Enforcement officer repository" }

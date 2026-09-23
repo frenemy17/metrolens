@@ -39,7 +39,7 @@ export default function AboutPage() {
           <h2 className="text-[26px] sm:text-[32px] font-bold tracking-tight text-text-primary">MetroLens</h2>
           <p className="text-[13px] sm:text-[15px] font-medium text-accent uppercase tracking-widest mt-1">SIH26034</p>
           <p className="text-xs sm:text-[14px] text-text-secondary mt-2 sm:mt-3 max-w-md mx-auto leading-relaxed">
-            AI-driven compliance engine for the Legal Metrology (Packaged Commodities) Rules, 2011.
+            Digital inspection and verification platform for the Legal Metrology (Packaged Commodities) Rules, 2011.
           </p>
         </div>
 
@@ -53,7 +53,7 @@ export default function AboutPage() {
                 <strong>MetroLens</strong> is built for the Smart India Hackathon (SIH) under the problem statement <strong>SIH26034</strong> issued by the <strong>Department of Consumer Affairs, Government of India</strong>.
               </p>
               <p>
-                The objective is to automate the scrutiny of pre-packaged commodity labels. By leveraging advanced Vision AI, the system instantly identifies mandatory declarations like Product Name, Net Quantity, MRP, Manufacturer Details, and FSSAI Licenses.
+                The objective is to automate the scrutiny of pre-packaged commodity labels. The system automates the inspection of statutory declarations including Product Name, Net Quantity, MRP, Manufacturer Details, and FSSAI Licenses.
               </p>
             </div>
           </section>
@@ -64,8 +64,8 @@ export default function AboutPage() {
               <div className="flex gap-3">
                 <div className="mt-1 text-accent"><Cpu size={20} /></div>
                 <div>
-                  <h4 className="font-semibold text-text-primary text-xs sm:text-[14px]">Vision Extraction</h4>
-                  <p className="text-[11px] sm:text-[13px] text-text-secondary mt-0.5 sm:mt-1">Extracts nested text using Gemini Flash Vision and Tesseract OCR fallbacks.</p>
+                  <h4 className="font-semibold text-text-primary text-xs sm:text-[14px]">Multi-Panel OCR Extraction</h4>
+                  <p className="text-[11px] sm:text-[13px] text-text-secondary mt-0.5 sm:mt-1">Extracts packaging declarations and numerals across multi-panel images with coordinate bounding boxes.</p>
                 </div>
               </div>
               <div className="flex gap-3">
@@ -104,7 +104,7 @@ export default function AboutPage() {
                 <span className="font-semibold text-text-primary">Next.js 16 (App Router)</span>
                 
                 <span className="text-text-muted font-mono text-[10px] sm:text-[11px] uppercase tracking-wider">Backend</span>
-                <span className="font-semibold text-text-primary">Node.js + PostgreSQL</span>
+                <span className="font-semibold text-text-primary">Python FastAPI + SQLite / PostgreSQL</span>
               </div>
             </div>
           </section>

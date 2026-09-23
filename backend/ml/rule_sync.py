@@ -25,7 +25,7 @@ def extract_rule_suggestions(pdf_text_or_bytes: Any) -> List[Dict[str, Any]]:
         text_content = str(pdf_text_or_bytes)[:15000] # Cap length for prompt
         
         prompt = f"""
-        You are a Legal Metrology expert AI. Read the following gazette text and identify any amendments 
+        You are an expert Legal Metrology statutory analyst. Read the following gazette text and identify any amendments 
         to packaging and labeling rules. 
         Output your findings STRICTLY as a JSON array of amendment objects.
         Each object must match this schema:
@@ -64,7 +64,7 @@ def extract_rule_suggestions(pdf_text_or_bytes: Any) -> List[Dict[str, Any]]:
                     "details": item.get("details")
                 },
                 "confidence": 0.95,
-                "explanation": item.get("explanation", "Extracted by Gemini AI.")
+                "explanation": item.get("explanation", "Extracted from gazette text.")
             })
         return results
 
@@ -95,7 +95,7 @@ def extract_rule_suggestions(pdf_text_or_bytes: Any) -> List[Dict[str, Any]]:
                             "details": item.get("details")
                         },
                         "confidence": 0.95,
-                        "explanation": item.get("explanation", "Extracted by Groq AI.")
+                        "explanation": item.get("explanation", "Extracted from gazette text.")
                     })
                 return results
             except Exception as ge:

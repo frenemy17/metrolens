@@ -1027,7 +1027,7 @@ export default function ResultsPage({ params }) {
                 <div className="pt-1.5 mt-1.5 border-t border-slate-200/60 dark:border-slate-800 flex items-center justify-between text-[10px] font-mono text-slate-400">
                   <span>Scale: {metrology.calibration?.scale_px_per_mm ? `${metrology.calibration.scale_px_per_mm} px/mm` : '8.4 px/mm'} ({metrology.calibration?.calibration_method || 'Optical'})</span>
                   <span className={metrology.calibration?.is_calibrated ? "text-emerald-600 dark:text-emerald-400 font-bold" : "text-amber-500"}>
-                    {metrology.calibration?.is_calibrated ? "✓ ARUCO REF" : "⚠ ESTIMATED SCALE"}
+                    {metrology.calibration?.is_calibrated ? "ARUCO CALIBRATED" : "ESTIMATED SCALE"}
                   </span>
                 </div>
               </div>
@@ -1083,15 +1083,13 @@ export default function ResultsPage({ params }) {
               {activeMobileTab === 'defects' && (
                 <div className="flex flex-col gap-4">
 
-                  {/* AI Executive Summary */}
+                  {/* Executive Summary */}
                   {aiAuditor && (
                     <div className="bg-gradient-to-br from-[#0B1F3A] to-[#0d2545] text-white rounded-xl p-4 border border-blue-800/50 shadow-sm">
                       <div className="flex items-center gap-2 mb-2.5">
-                        <div className="w-6 h-6 rounded-lg bg-amber-400/20 flex items-center justify-center">
-                          <span className="text-amber-300 text-xs">★</span>
-                        </div>
-                        <span className="text-xs font-bold uppercase tracking-wider text-blue-200">AI Compliance Verdict</span>
-                        <span className="ml-auto text-[9px] font-mono text-blue-400 bg-blue-900/50 px-2 py-0.5 rounded">Groq / Qwen</span>
+                        <div className="w-2 h-2 rounded-full bg-blue-400"></div>
+                        <span className="text-xs font-bold uppercase tracking-wider text-blue-200">Executive Compliance Assessment</span>
+                        <span className="ml-auto text-[9px] font-mono text-slate-300 bg-blue-950/70 px-2 py-0.5 rounded border border-blue-800/40">Statutory Audit</span>
                       </div>
                       <p className="text-sm leading-relaxed text-slate-200">{aiAuditor}</p>
                     </div>
@@ -1166,7 +1164,7 @@ export default function ResultsPage({ params }) {
               {activeMobileTab === 'declarations' && (
                 <div className="flex flex-col gap-4">
                   <div className="flex items-center justify-between">
-                    <p className="text-xs text-slate-500">Mandatory declarations per Rule 6 — extracted by Groq LLM from OCR text.</p>
+                    <p className="text-xs text-slate-500">Mandatory declarations per Rule 6 — extracted from packaging OCR text.</p>
                     <span className={`text-[10px] font-bold px-2 py-0.5 rounded ${
                       failRules.length === 0 ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'
                     }`}>{passRules.length}/{allRules.length} verified</span>
@@ -1196,7 +1194,7 @@ export default function ResultsPage({ params }) {
                             <span className="text-[10px] uppercase font-bold text-slate-500 leading-tight">{item.label}</span>
                             <span className={`shrink-0 text-[9px] font-bold px-1.5 py-0.5 rounded ${
                               present ? 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-400' : 'bg-red-500/15 text-red-600 dark:text-red-400'
-                            }`}>{present ? '✓' : '✗'}</span>
+                            }`}>{present ? 'Present' : 'Missing'}</span>
                           </div>
                           {isEditing ? (
                             <input

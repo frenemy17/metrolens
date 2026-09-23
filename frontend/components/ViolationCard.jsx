@@ -1,4 +1,5 @@
 'use client';
+import { Info } from 'lucide-react';
 
 /**
  * ViolationCard — Blueprint §8 5-status system.
@@ -175,7 +176,7 @@ export default function ViolationCard({ violation: v }) {
             className="text-xs italic flex gap-2 pt-1"
             style={{ color: `${statusCfg.chipStyle.color}aa`, borderTop: `1px solid var(${statusCfg.borderVar})` }}
           >
-            <span>ⓘ</span>
+            <Info size={13} className="shrink-0 mt-0.5" />
             <span>{statusCfg.disclaimer}</span>
           </p>
         )}

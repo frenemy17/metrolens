@@ -61,7 +61,7 @@ export default function RulesPage() {
   const [activeTab, setActiveTab] = useState('violated');
   const [loading, setLoading] = useState(true);
 
-  // Gazette AI Sync state
+  // Gazette Sync state
   const [gazetteText, setGazetteText] = useState('');
   const [isAnalyzing, setIsAnalyzing] = useState(false);
   const [suggestions, setSuggestions] = useState([]);
@@ -124,12 +124,12 @@ export default function RulesPage() {
       const suggs = json.suggestions || [];
       setSuggestions(suggs);
       if (suggs.length > 0) {
-        toast.success(`Extracted ${suggs.length} statutory amendment suggestion(s) via Gemini AI.`);
+        toast.success(`Extracted ${suggs.length} statutory amendment suggestion(s).`);
       } else {
         toast.info('No amendments detected in the provided text.');
       }
     } catch (err) {
-      toast.error('AI Gazette parsing error: ' + err.message);
+      toast.error('Gazette parsing error: ' + err.message);
     } finally {
       setIsAnalyzing(false);
     }
@@ -209,7 +209,7 @@ export default function RulesPage() {
             className={`pb-3 text-xs sm:text-[14px] font-medium transition-colors border-b-2 whitespace-nowrap cursor-pointer flex items-center gap-2 ${activeTab === 'gazette_sync' ? 'border-purple-500 text-purple-600 dark:text-purple-400 font-bold' : 'border-transparent text-text-secondary hover:text-text-primary'}`}
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>
-            Gazette AI Sync (Gemini)
+            Gazette Regulation Sync
           </button>
         </div>
 
@@ -235,7 +235,7 @@ export default function RulesPage() {
                         <div className="w-2 h-2 rounded-full bg-[#4ade80]"></div>
                         <span className="font-mono text-xs sm:text-[13px] text-text-secondary">{r.rule_id}</span>
                       </div>
-                      <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-full text-[9px] sm:text-[10px] font-bold tracking-widest uppercase">AI Monitored</span>
+                      <span className="px-2.5 sm:px-3 py-0.5 sm:py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-full text-[9px] sm:text-[10px] font-bold tracking-widest uppercase">System Monitored</span>
                     </div>
                     <h3 className="font-medium text-[15px] sm:text-[16px] text-text-primary mb-1.5">{r.name}</h3>
                     <p className="text-xs sm:text-[14px] text-text-muted leading-relaxed mb-4 sm:mb-6 flex-1">{r.description}</p>
@@ -260,7 +260,7 @@ export default function RulesPage() {
                       <div className={`w-2 h-2 rounded-full ${isMonitored ? 'bg-[#4ade80]' : 'bg-text-muted'}`}></div>
                       <span className="font-mono text-xs sm:text-[13px] text-text-secondary">{r.id}</span>
                     </div>
-                    <span className={isMonitored ? 'px-2.5 sm:px-3 py-0.5 sm:py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-full text-[9px] sm:text-[10px] font-bold tracking-widest uppercase' : 'px-2.5 sm:px-3 py-0.5 sm:py-1 bg-text-muted/10 text-text-muted border border-border rounded-full text-[9px] sm:text-[10px] font-bold tracking-widest uppercase'}>{isMonitored ? 'AI Monitored' : 'Manual / Admin'}</span>
+                    <span className={isMonitored ? 'px-2.5 sm:px-3 py-0.5 sm:py-1 bg-emerald-500/10 text-emerald-600 dark:text-emerald-400 border border-emerald-500/20 rounded-full text-[9px] sm:text-[10px] font-bold tracking-widest uppercase' : 'px-2.5 sm:px-3 py-0.5 sm:py-1 bg-text-muted/10 text-text-muted border border-border rounded-full text-[9px] sm:text-[10px] font-bold tracking-widest uppercase'}>{isMonitored ? 'System Monitored' : 'Manual / Admin'}</span>
                   </div>
                   <h3 className="font-medium text-[15px] sm:text-[16px] text-text-primary mb-1.5">{r.name}</h3>
                   <p className="text-xs sm:text-[14px] text-text-muted leading-relaxed mb-4 sm:mb-6 flex-1">{r.desc}</p>
@@ -270,7 +270,7 @@ export default function RulesPage() {
           </div>
         )}
 
-        {/* ── TAB 3: GAZETTE AI SYNC (GEMINI) ── */}
+        {/* ── TAB 3: GAZETTE REGULATION SYNC ── */}
         {activeTab === 'gazette_sync' && (
           <div className="space-y-6">
             <div className="glass border border-border/50 rounded-2xl sm:rounded-[24px] p-5 sm:p-7 shadow-xs">
@@ -278,7 +278,7 @@ export default function RulesPage() {
                 <div>
                   <h3 className="text-base sm:text-lg font-bold text-slate-900 dark:text-white flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-purple-500"></span>
-                    Gazette Amendment Parser (Google Gemini AI)
+                    Gazette Amendment Parser
                   </h3>
                   <p className="text-xs text-text-secondary mt-1">
                     Upload or paste official Ministry notifications to extract packaging amendments and publish new versioned rulepacks.
@@ -311,12 +311,12 @@ export default function RulesPage() {
                   {isAnalyzing ? (
                     <>
                       <div className="w-3.5 h-3.5 border-2 border-white border-t-transparent rounded-full animate-spin"></div>
-                      <span>Gemini AI Analyzing Gazette...</span>
+                      <span>Analyzing Gazette Text...</span>
                     </>
                   ) : (
                     <>
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="17 8 12 3 7 8"/><line x1="12" y1="3" x2="12" y2="15"/></svg>
-                      <span>Analyze with Gemini AI</span>
+                      <span>Analyze Gazette Text</span>
                     </>
                   )}
                 </button>
@@ -330,7 +330,7 @@ export default function RulesPage() {
                   <div className="flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-emerald-500"></span>
                     <h4 className="text-sm sm:text-base font-bold text-slate-900 dark:text-white">
-                      AI Extracted Amendments ({suggestions.length})
+                      Extracted Statutory Amendments ({suggestions.length})
                     </h4>
                   </div>
                   <span className="text-[11px] font-mono px-2.5 py-0.5 rounded-full bg-purple-500/10 text-purple-600 dark:text-purple-400 border border-purple-500/20 font-bold">

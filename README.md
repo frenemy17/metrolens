@@ -1,6 +1,6 @@
 # MetroLens (राष्ट्रीय विधिक मापविज्ञान पोर्टल)
 
-**AI-Assisted Legal Metrology Compliance & Inspection System**  
+**Computer-Aided Legal Metrology Statutory Verification & Inspection System**  
 Built for the Ministry of Consumer Affairs, Food & Public Distribution, Government of India.
 
 ---
@@ -9,13 +9,13 @@ Built for the Ministry of Consumer Affairs, Food & Public Distribution, Governme
 
 MetroLens is a digital metrology enforcement and verification platform engineered to automate package label inspections under the **Legal Metrology (Packaged Commodities) Rules, 2011**, **Food Safety and Standards Act, 2006**, and the **Jan Vishwas (Amendment of Provisions) Act, 2023**.
 
-The system combines classical Computer Vision, Optical Character Recognition (OCR), and deterministic legal rulepacks with an AI Auditor to provide court-admissible inspection records adhering to **Section 65B of the Indian Evidence Act**.
+The system combines classical Computer Vision, Optical Character Recognition (OCR), and deterministic legal rulepacks with automated executive audit summarization to provide court-admissible inspection records adhering to **Section 65B of the Indian Evidence Act**.
 
 ---
 
 ## Architecture & Principles
 
-MetroLens strictly separates probabilistic AI from deterministic rule evaluation:
+MetroLens strictly separates probabilistic inference from deterministic statutory rule evaluation:
 
 ```
 ┌─────────────────┐       ┌─────────────────┐       ┌─────────────────┐
@@ -55,7 +55,7 @@ metrolens/
 │   ├── alembic/              # Database migrations
 │   ├── api/v1/               # REST API endpoints (inspections, enforcement, dashboard, rules)
 │   ├── core/                 # Rule engine, database models, security, metrology
-│   ├── ml/                   # OCR, AI auditor, Computer Vision, gazette rule sync
+│   ├── ml/                   # OCR, Executive Auditor, Computer Vision, gazette rule sync
 │   ├── rulepacks/            # Versioned Legal Metrology rule definitions (v1.json)
 │   ├── tests/                # Automated pytest suite
 │   ├── .env.example          # Environment configuration template

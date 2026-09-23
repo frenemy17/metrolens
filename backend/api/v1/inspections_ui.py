@@ -1,6 +1,6 @@
 """
 MetroLens — UI Batch Inspection Endpoint
-Wires: OCR → Groq LLM extraction → Rule Engine (v1.json) → CV metrology → AI Auditor → DB
+Wires: Multi-Panel OCR → Structured Field Extraction → Rule Engine (v1.json) → CV Metrology → Executive Auditor → DB
 """
 
 from fastapi import APIRouter, Depends, File, UploadFile, Form, HTTPException
@@ -132,7 +132,7 @@ async def ui_upload_batch(
         if not GroqClient:
             raise ImportError("Groq package not installed")
         client = GroqClient(api_key=os.environ.get("GROQ_API_KEY"))
-        extraction_prompt = f"""You are a Legal Metrology AI assistant. Analyse this raw OCR text from an Indian packaged food label.
+        extraction_prompt = f"""You are a statutory Legal Metrology inspection engine. Analyse this raw OCR text from an Indian packaged food label.
 CRITICAL: Do NOT guess. If a field is absent or illegible, output null for that field.
 
 Raw OCR Text:

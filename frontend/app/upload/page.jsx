@@ -6,7 +6,7 @@ import { triggerHaptic } from '@/utils/haptics';
 import { openDB } from 'idb';
 import NavBar from '@/components/NavBar';
 import DynamicLoader from '@/components/DynamicLoader';
-import { X, AlertTriangle, ShieldCheck, Sparkles } from 'lucide-react';
+import { X, AlertTriangle, ShieldCheck, Package, Globe } from 'lucide-react';
 
 const API = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:8000/api/v1';
 
@@ -165,12 +165,12 @@ export default function UploadPage() {
     if (!ecomUrl.trim()) return toast.error('Please enter an e-commerce product URL.');
     setLoading(true);
     setErrorBanner(null);
-    const toastId = toast.loading('Crawling live webpage & extracting declarations via Gemini AI...');
+    const toastId = toast.loading('Crawling digital product listing and extracting declarations...');
     setLogs([
       '> Connecting to live marketplace endpoint...',
       `> Target URL: ${ecomUrl}`,
       '> Parsing HTML DOM & structured JSON-LD schemas...',
-      '> Gemini 3.6 Flash extracting Rule 6(1) packaging declarations...',
+      '> Extracting Rule 6(1) packaging declarations from listing...',
       '> Cross-verifying against Rule 6(10) statutory exemptions...'
     ]);
 
@@ -201,7 +201,7 @@ export default function UploadPage() {
         `> Statutory Verdict: ${json.overall_compliance || json.verdict}`,
         '> Redirecting to inspection report...'
       ]);
-      toast.success('Live page audited successfully via Gemini AI!', { id: toastId });
+      toast.success('Digital listing audited successfully.', { id: toastId });
       setTimeout(() => {
         router.push(`/results/${inspId}`);
       }, 1200);
@@ -328,7 +328,7 @@ export default function UploadPage() {
         return;
       }
 
-      setLogs(prev => [...prev, `> Batch assigned: ${batchId.slice(0, 8)}...`, '> Executing AI OCR & Legal Metrology extraction pipeline...']);
+      setLogs(prev => [...prev, `> Batch assigned: ${batchId.slice(0, 8)}...`, '> Executing OCR & Legal Metrology extraction pipeline...']);
 
       let completed = false;
 
@@ -499,7 +499,8 @@ export default function UploadPage() {
                     : 'text-text-secondary hover:text-text-primary'
                 }`}
               >
-                <span>📦 Physical Package Scan</span>
+                <Package size={14} className="shrink-0" />
+                <span>Physical Package Scan</span>
               </button>
               <button
                 type="button"
@@ -510,7 +511,8 @@ export default function UploadPage() {
                     : 'text-text-secondary hover:text-text-primary'
                 }`}
               >
-                <span>🛒 E-Commerce Digital Listing</span>
+                <Globe size={14} className="shrink-0" />
+                <span>E-Commerce Digital Listing</span>
                 <span className="text-[9px] font-mono px-1.5 py-0.5 rounded bg-amber-500/10 text-amber-600 dark:text-amber-400 border border-amber-500/20">Rule 6(10)</span>
               </button>
             </div>
@@ -523,12 +525,12 @@ export default function UploadPage() {
                     {previews.length > 0 ? (
                       <div className="w-full flex flex-col gap-4">
                         <div className="text-[13px] text-text-secondary text-center">
-                          Added {previews.length} of 3 photos. AI will synthesize all angles.
+                          Added {previews.length} of 3 photos. Multi-panel analysis will synthesize all angles.
                         </div>
                         <div className="flex flex-wrap gap-3 sm:gap-4 justify-center items-center">
                           {previews.map((src, i) => (
                             <div key={i} className="relative w-[90px] sm:w-[100px] h-[130px] sm:h-[140px] border border-border rounded-lg overflow-hidden group/img shadow-sm">
-                              <img src={src} className="w-full h-full object-cover" />
+                              <img src={src} alt={`Packaging photo ${i + 1}`} className="w-full h-full object-cover" />
                               <button type="button" onClick={() => removeFile(i)} className="absolute top-1 right-1 bg-red-500 text-white w-6 h-6 rounded-full flex items-center justify-center opacity-90 sm:opacity-0 sm:group-hover/img:opacity-100 transition-opacity z-20 hover:scale-110 cursor-pointer">
                                 <X size={14} />
                               </button>
@@ -734,8 +736,8 @@ export default function UploadPage() {
                   className="mello-btn-primary flex-1 h-[52px] sm:h-[48px] text-xs sm:text-sm font-bold shadow-md active-press rounded-xl cursor-pointer flex items-center justify-center gap-2 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white"
                   disabled={loading}
                 >
-                  <Sparkles size={16} />
-                  <span>{loading ? 'Crawling & extracting via Gemini...' : '⚡ Auto-Crawl & Audit URL (Gemini AI)'}</span>
+                  <Globe size={16} />
+                  <span>{loading ? 'Crawling & extracting declarations...' : 'Auto-Crawl & Audit URL'}</span>
                 </button>
                 <button
                   type="submit"
